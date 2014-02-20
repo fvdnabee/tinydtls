@@ -70,9 +70,15 @@
   HASH_DELETE(hh,head,delptr)
 #endif /* WITH_CONTIKI */
 
+//#if defined(RM090)
+//#define DTLS_RH_LENGTH 13 // sizeof(dtls_record_header_t) returns 14
+//#define DTLS_HS_LENGTH 12
+//#define DTLS_CH_LENGTH 34 /* no variable length fields! */
+//#else
 #define DTLS_RH_LENGTH sizeof(dtls_record_header_t)
 #define DTLS_HS_LENGTH sizeof(dtls_handshake_header_t)
 #define DTLS_CH_LENGTH sizeof(dtls_client_hello_t) /* no variable length fields! */
+//#endif
 #define DTLS_COOKIE_LENGTH_MAX 32
 #define DTLS_CH_LENGTH_MAX sizeof(dtls_client_hello_t) + DTLS_COOKIE_LENGTH_MAX + 12 + 26
 #define DTLS_HV_LENGTH sizeof(dtls_hello_verify_t)
@@ -348,11 +354,13 @@ is_record(uint8 *msg, size_t msglen) {
       && msg[2] == LOW(DTLS_VERSION)) 
     {
       rlen = DTLS_RH_LENGTH + 
-	dtls_uint16_to_int(DTLS_RECORD_HEADER(msg)->length);
+        dtls_uint16_to_int(DTLS_RECORD_HEADER(msg)->length);
       
       /* we do not accept wrong length field in record header */
-      if (rlen > msglen)	
-	rlen = 0;
+      if (rlen > msglen)	 {
+        warn("Wrong length field in record header, rlen=%d (DTLS_RH_LENGTH=%d), msglen=%d", rlen, DTLS_RH_LENGTH, msglen);
+        rlen = 0;
+      }
   } 
   
   return rlen;
@@ -408,6 +416,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint8(buf, type);
   buf += sizeof(uint8);
 
+  dsrv_log(LOG_DEBUG, "dtls_set_handshake_header() length = %d", length); // fvdabeele
   dtls_int_to_uint24(buf, length);
   buf += sizeof(uint24);
 
@@ -425,6 +434,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint24(buf, frag_offset);
   buf += sizeof(uint24);
 
+  dsrv_log(LOG_DEBUG, "dtls_set_handshake_header() fragment_length = %d", frag_length); // fvdabeele
   dtls_int_to_uint24(buf, frag_length);
   buf += sizeof(uint24);
   
@@ -3538,7 +3548,15 @@ dtls_handle_message(dtls_context_t *ctx,
     dtls_debug("dtls_handle_message: FOUND PEER\n");
   }
 
-  while ((rlen = is_record(msg,msglen))) {
+  debug("dtls_handle_message: pre-while\n");
+  rlen = is_record(msg,msglen);
+  if(!rlen)
+    warn("packet not recognized as DTLS record: msglen=%d, rlen=%d\n", msglen,rlen);
+
+  info("msg[0]=%x, msg[1]=%x, msg[2]=%x", msg[0],msg[1], msg[2]);
+  info("HIGH(DTLS_VERSION) = %x, LOW(DTLS_VERSION) = %x", HIGH(DTLS_VERSION),LOW(DTLS_VERSION));
+
+  while ((rlen)) {
     dtls_peer_type role;
     dtls_state_t state;
 
@@ -3627,6 +3645,7 @@ dtls_handle_message(dtls_context_t *ctx,
     msg += rlen;
     msglen -= rlen;
   }
+  debug("dtls_handle_message: post-while\n");
 
   return 0;
 }

@@ -159,11 +159,19 @@ dtls_handle_read(dtls_context_t *ctx) {
   session_t session;
 
   if(uip_newdata()) {
+    uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
+    PRINTF("\n");
+    uip_ipaddr_t temp;
+    uip_ipaddr_copy(&temp,&UIP_IP_BUF->srcipaddr);
+    uip_debug_ipaddr_print(&temp);
+    PRINTF("\n");
+
     uip_ipaddr_copy(&session.addr, &UIP_IP_BUF->srcipaddr);
     session.port = UIP_UDP_BUF->srcport;
     session.size = sizeof(session.addr) + sizeof(session.port);
     
-    dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
+    uint8 r = dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
+    PRINTF("dtls_handle_message returned %d\n", r);
   }
 }
 /*---------------------------------------------------------------------------*/

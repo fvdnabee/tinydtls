@@ -54,6 +54,9 @@ const char *dtls_package_version() {
   return PACKAGE_STRING;
 }
 
+#ifndef NDEBUG
+static int maxlog = LOG_WARN;	/* default maximum log level */
+
 log_t 
 dtls_get_log_level() {
   return maxlog;
@@ -68,6 +71,7 @@ dtls_set_log_level(log_t level) {
 static char *loglevels[] = {
   "EMRG", "ALRT", "CRIT", "WARN", "NOTE", "INFO", "DEBG" 
 };
+#endif
 
 #ifdef HAVE_TIME_H
 
@@ -229,6 +233,8 @@ dsrv_log(log_t level, char *format, ...) {
   fflush(log_fd);
 }
 #elif defined (HAVE_VPRINTF) /* WITH_CONTIKI */
+//#else /* WITH_CONTIKI */
+#ifndef NDEBUG
 void 
 dsrv_log(log_t level, char *format, ...) {
   static char timebuf[32];
@@ -247,6 +253,7 @@ dsrv_log(log_t level, char *format, ...) {
   vprintf(format, ap);
   va_end(ap);
 }
+#endif /* NDEBUG */
 #endif /* WITH_CONTIKI */
 
 #ifndef NDEBUG

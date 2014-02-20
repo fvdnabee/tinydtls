@@ -65,7 +65,11 @@ typedef struct dtls_psk_key_t {
   size_t id_length;      /**< length of psk identity  */
   unsigned char *key;    /**< key data */
   size_t key_length;     /**< length of key */
-} dtls_psk_key_t;
+}
+#if defined(RM090)
+__attribute__((packed))
+#endif
+dtls_psk_key_t;
 
 typedef struct dtls_ecdsa_key_t {
   dtls_ecdh_curve curve;
@@ -336,7 +340,11 @@ typedef struct __attribute__((__packed__)) {
   uint48 sequence_number;       /**< sequence number */
   uint16 length;		/**< length of the following fragment */
   /* fragment */
-} dtls_record_header_t;
+}
+#if defined(RM090)
+__attribute__((packed))
+#endif
+dtls_record_header_t;
 
 /* Handshake types */
 
@@ -360,7 +368,11 @@ typedef struct __attribute__((__packed__)) {
   uint24 fragment_offset;	/**< Fragment offset. */
   uint24 fragment_length;	/**< Fragment length. */
   /* body */
-} dtls_handshake_header_t;
+} 
+#if defined(RM090)
+__attribute__((packed))
+#endif
+dtls_handshake_header_t;
 
 /** Structure of the Client Hello message. */
 typedef struct __attribute__((__packed__)) {
@@ -371,14 +383,22 @@ typedef struct __attribute__((__packed__)) {
   /* cookie (up to 32 bytes) */
   /* cipher suite (2 to 2^16 -1 bytes) */
   /* compression method */
-} dtls_client_hello_t;
+} 
+#if defined(RM090)
+__attribute__((packed))
+#endif
+dtls_client_hello_t;
 
 /** Structure of the Hello Verify Request. */
 typedef struct __attribute__((__packed__)) {
   uint16 version;		/**< Server version */
   uint8 cookie_length;	/**< Length of the included cookie */
   uint8 cookie[];		/**< up to 32 bytes making up the cookie */
-} dtls_hello_verify_t;  
+} 
+#if defined(RM090)
+__attribute__((packed))
+#endif
+dtls_hello_verify_t;  
 
 #if 0
 /** 

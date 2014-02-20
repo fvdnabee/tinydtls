@@ -67,6 +67,16 @@ typedef int ssize_t;
 #undef HAVE_ASSERT_H
 #endif /* defined(TMOTE_SKY) */
 
+#if defined(RM090)
+/* Need to set the byte order for RM090 explicitely */
+
+#define BYTE_ORDER LITTLE_ENDIAN
+
+typedef int ssize_t;
+#undef HAVE_ASSERT_H
+//#define assert(x)
+#endif /* defined(RM090) */
+
 #ifndef BYTE_ORDER
 # ifdef UIP_CONF_BYTE_ORDER
 #  define BYTE_ORDER UIP_CONF_BYTE_ORDER
