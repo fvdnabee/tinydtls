@@ -40,7 +40,7 @@
 #ifndef DEBUG
 #define DEBUG DEBUG_PRINT
 #endif
-#include "net/uip-debug.h"
+#include "net/ip/uip-debug.h"
 
 #include "debug.h"
 #include "dtls.h"
@@ -78,6 +78,8 @@ read_from_peer(struct dtls_context_t *ctx,
   size_t i;
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
+
+  PRINTF("\nend of of application data\n"); // fvdabeele
 
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
@@ -192,7 +194,7 @@ print_local_addresses(void)
   }
 }
 
-#if UIP_CONF_ROUTER
+#if UIP_CONF_ROUTER && CONTIKI_TINYDTLS_RPL_DAG
 static void
 create_rpl_dag(uip_ipaddr_t *ipaddr)
 {
@@ -228,7 +230,7 @@ init_dtls() {
     .verify_ecdsa_key = verify_ecdsa_key
 #endif /* DTLS_ECC */
   };
-#if UIP_CONF_ROUTER
+#if UIP_CONF_ROUTER && CONTIKI_TINYDTLS_RPL_DAG
   uip_ipaddr_t ipaddr;
 #endif /* UIP_CONF_ROUTER */
 
@@ -242,7 +244,7 @@ init_dtls() {
 #endif
 #endif /* TEST */
 
-#if UIP_CONF_ROUTER
+#if UIP_CONF_ROUTER && CONTIKI_TINYDTLS_RPL_DAG
   uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
@@ -251,7 +253,7 @@ init_dtls() {
 #endif /* UIP_CONF_ROUTER */
 
   server_conn = udp_new(NULL, 0, NULL);
-  udp_bind(server_conn, UIP_HTONS(20220));
+  udp_bind(server_conn, UIP_HTONS(5683));
 
   dtls_set_log_level(DTLS_LOG_DEBUG);
 

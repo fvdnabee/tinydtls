@@ -79,6 +79,7 @@
 #define DTLS_HS_LENGTH sizeof(dtls_handshake_header_t)
 #define DTLS_CH_LENGTH sizeof(dtls_client_hello_t) /* no variable length fields! */
 //#endif
+
 #define DTLS_COOKIE_LENGTH_MAX 32
 #define DTLS_CH_LENGTH_MAX sizeof(dtls_client_hello_t) + DTLS_COOKIE_LENGTH_MAX + 12 + 26
 #define DTLS_HV_LENGTH sizeof(dtls_hello_verify_t)
@@ -358,7 +359,7 @@ is_record(uint8 *msg, size_t msglen) {
       
       /* we do not accept wrong length field in record header */
       if (rlen > msglen)	 {
-        warn("Wrong length field in record header, rlen=%d (DTLS_RH_LENGTH=%d), msglen=%d", rlen, DTLS_RH_LENGTH, msglen);
+        dtls_warn("Wrong length field in record header, rlen=%d (DTLS_RH_LENGTH=%d), msglen=%d", rlen, DTLS_RH_LENGTH, msglen); // fvdabeele
         rlen = 0;
       }
   } 
@@ -416,7 +417,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint8(buf, type);
   buf += sizeof(uint8);
 
-  dsrv_log(LOG_DEBUG, "dtls_set_handshake_header() length = %d", length); // fvdabeele
+  dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() length = %d\n", length); // fvdabeele
   dtls_int_to_uint24(buf, length);
   buf += sizeof(uint24);
 
@@ -434,7 +435,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint24(buf, frag_offset);
   buf += sizeof(uint24);
 
-  dsrv_log(LOG_DEBUG, "dtls_set_handshake_header() fragment_length = %d", frag_length); // fvdabeele
+  dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() fragment_length = %d\n", frag_length); // fvdabeele
   dtls_int_to_uint24(buf, frag_length);
   buf += sizeof(uint24);
   
@@ -1246,7 +1247,8 @@ dtls_prepare_record(dtls_peer_t *peer, dtls_security_parameters_t *security,
      * additional_data = seq_num + TLSCompressed.type +
      *                   TLSCompressed.version + TLSCompressed.length;
      */
-    memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */
+    memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
+    //memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
     memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(sendbuf)->content_type, 3); /* type and version */
     dtls_int_to_uint16(A_DATA + 11, res - 8); /* length */
     
@@ -2071,6 +2073,7 @@ dtls_send_server_hello_msgs(dtls_context_t *ctx, dtls_peer_t *peer)
 
 #ifdef DTLS_PSK
   if (is_tls_psk_with_aes_128_ccm_8(peer->handshake_params->cipher)) {
+    dtls_debug("Cipher: TLS PSL WITH AES 128 CCM 8\n");
     const dtls_psk_key_t *psk;
 
     res = CALL(ctx, get_psk_key, &peer->session, NULL, 0, &psk);
@@ -2398,6 +2401,8 @@ dtls_send_client_hello(dtls_context_t *ctx, dtls_peer_t *peer,
 				      buf, p - buf, cookie_length != 0);
 }
 
+int count = 0; // tom
+
 static int
 check_server_hello(dtls_context_t *ctx, 
 		      dtls_peer_t *peer,
@@ -2413,7 +2418,13 @@ check_server_hello(dtls_context_t *ctx,
   if (data_length < DTLS_HS_LENGTH + DTLS_HS_LENGTH)
     return dtls_alert_fatal_create(DTLS_ALERT_DECODE_ERROR);
 
-  update_hs_hash(peer, data, data_length);
+  // Tom
+  //if (count == 0) {
+    update_hs_hash(peer, data, data_length);
+    //count++;
+  //}
+
+  //update_hs_hash(peer, data, data_length);
 
   /* FIXME: check data_length before accessing fields */
 
@@ -3154,7 +3165,11 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
 
     if ((peer && state != DTLS_STATE_CONNECTED) ||
 	(!peer && state != DTLS_STATE_WAIT_CLIENTHELLO)) {
-      return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
+
+      // Tom
+      //return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
+      dtls_warn("TOM: unexpected message swapped for server send hello");
+      return dtls_send_server_hello_done(ctx,peer);
     }
 
     /* When no DTLS state exists for this peer, we only allow a
@@ -3389,7 +3404,12 @@ handle_handshake(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
     }
     return res;
   }
-  assert(0);
+  //assert(0);
+  // tom
+  if (state != DTLS_STATE_WAIT_SERVERHELLODONE) {
+     return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
+  }
+  // TODO: fix return value
   return 0;
 }
 
@@ -3414,14 +3434,18 @@ handle_ccs(dtls_context_t *ctx, dtls_peer_t *peer,
   if (data_length < 1 || data[0] != 1)
     return dtls_alert_fatal_create(DTLS_ALERT_DECODE_ERROR);
 
+  dtls_info("handle_ccs() 1");
   /* Just change the cipher when we are on the same epoch */
   if (peer->role == DTLS_SERVER) {
+  dtls_info("handle_ccs() 2");
     err = calculate_key_block(ctx, handshake, peer,
 			      &peer->session, peer->role);
     if (err < 0) {
+  dtls_info("handle_ccs() 3");
       return err;
     }
   }
+  dtls_info("handle_ccs() 4");
   
   peer->state = DTLS_STATE_WAIT_FINISHED;
 
@@ -3548,24 +3572,23 @@ dtls_handle_message(dtls_context_t *ctx,
     dtls_debug("dtls_handle_message: FOUND PEER\n");
   }
 
-  debug("dtls_handle_message: pre-while\n");
-  rlen = is_record(msg,msglen);
-  if(!rlen)
-    warn("packet not recognized as DTLS record: msglen=%d, rlen=%d\n", msglen,rlen);
+  dtls_debug("dtls_handle_message: pre-while\n"); //fvdabeele
+  
+  dtls_info("msg[0]=%x, msg[1]=%x, msg[2]=%x,  msglen=%d\n", msg[0],msg[1], msg[2], msglen); // fvdabeele
+  dtls_info("HIGH(DTLS_VERSION) = %x, LOW(DTLS_VERSION) = %x\n", HIGH(DTLS_VERSION),LOW(DTLS_VERSION)); // fvdabeele
 
-  info("msg[0]=%x, msg[1]=%x, msg[2]=%x", msg[0],msg[1], msg[2]);
-  info("HIGH(DTLS_VERSION) = %x, LOW(DTLS_VERSION) = %x", HIGH(DTLS_VERSION),LOW(DTLS_VERSION));
-
-  while ((rlen)) {
+  while ((rlen = is_record(msg,msglen))) {
     dtls_peer_type role;
     dtls_state_t state;
 
+    dtls_debug("rlen=%d, msglen=%d\\n", rlen, msglen);
     dtls_debug("got packet %d (%d bytes)\n", msg[0], rlen);
     if (peer) {
       data_length = decrypt_verify(peer, msg, rlen, &data);
       if (data_length < 0) {
-        dtls_info("decrypt_verify() failed\n");
-        goto next;
+        //dtls_info("decrypt_verify() failed\n");
+        dtls_info("decrypt_verify() failed, but we are continuing anyway.\n");
+        //goto next; // florisvda
       }
       role = peer->role;
       state = peer->state;
@@ -3645,7 +3668,7 @@ dtls_handle_message(dtls_context_t *ctx,
     msg += rlen;
     msglen -= rlen;
   }
-  debug("dtls_handle_message: post-while\n");
+  dtls_debug("dtls_handle_message: post-while\n"); //fvdabeele
 
   return 0;
 }
@@ -3909,7 +3932,7 @@ PROCESS_THREAD(dtls_retransmit_process, ev, data)
 	/* need to set timer to some value even if no nextpdu is available */
 	if (node) {
 	  etimer_set(&the_dtls_context.retransmit_timer, 
-		     node->t <= now ? 1 : node->t - now);
+		     node->t <= now ? 2*CLOCK_SECOND : node->t - now);
 	} else {
 	  etimer_set(&the_dtls_context.retransmit_timer, 0xFFFF);
 	}

@@ -44,8 +44,11 @@
 #include "global.h"
 #include "debug.h"
 
+#ifndef NDEBUG
 static int maxlog = DTLS_LOG_WARN;	/* default maximum log level */
+#endif
 
+#ifndef WITH_CONTIKI
 const char *dtls_package_name() {
   return PACKAGE_NAME;
 }
@@ -53,10 +56,17 @@ const char *dtls_package_name() {
 const char *dtls_package_version() {
   return PACKAGE_STRING;
 }
+#else
+const char *dtls_package_name() {
+  return "";
+}
+
+const char *dtls_package_version() {
+  return "";
+}
+#endif
 
 #ifndef NDEBUG
-static int maxlog = LOG_WARN;	/* default maximum log level */
-
 log_t 
 dtls_get_log_level() {
   return maxlog;

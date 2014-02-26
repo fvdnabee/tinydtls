@@ -1,3 +1,6 @@
+#ifndef UDP_CONNECTION_ADDR
+#define UDP_CONNECTION_ADDR       fe80:0:0:0:0:0:0:2
+#endif /* !UDP_CONNECTION_ADDR */
 /*
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,7 +43,7 @@
 #ifndef DEBUG
 #define DEBUG DEBUG_PRINT
 #endif
-#include "net/uip-debug.h"
+#include "net/ip/uip-debug.h"
 
 #include "debug.h"
 #include "dtls.h"
@@ -210,7 +213,8 @@ set_connection_address(uip_ipaddr_t *ipaddr)
 #elif UIP_CONF_ROUTER
   uip_ip6addr(ipaddr,0xaaaa,0,0,0,0x0200,0x0000,0x0000,0x0001);
 #else
-  uip_ip6addr(ipaddr,0xfe80,0,0,0,0x6466,0x6666,0x6666,0x6666);
+  //uip_ip6addr(ipaddr,0xfe80,0,0,0,0x6466,0x6666,0x6666,0x6666);
+  uip_ip6addr(ipaddr,0xfe80,0,0,0,0,0,0,0x0002);
 #endif /* UDP_CONNECTION_ADDR */
 }
 
@@ -262,6 +266,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
   init_dtls(&dst);
   serial_line_init();
+#ifdef CONTIKI_TARGET_RM090
+  uart1_set_input(serial_line_input_byte);
+#endif
 
   if (!dtls_context) {
     dtls_emerg("cannot create context\n");
@@ -269,10 +276,14 @@ PROCESS_THREAD(udp_server_process, ev, data)
   }
 
   while(1) {
+    PRINTF("PROCESS_YIELD()");
     PROCESS_YIELD();
+    PRINTF("PROCESS_YIELD() returned");
     if(ev == tcpip_event) {
+      PRINTF("tcpip_event");
       dtls_handle_read(dtls_context);
     } else if (ev == serial_line_event_message) {
+      PRINTF("serial_line_event_message");
       register size_t len = min(strlen(data), sizeof(buf) - buflen);
       memcpy(buf + buflen, data, len);
       buflen += len;

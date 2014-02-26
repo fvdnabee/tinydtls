@@ -26,7 +26,11 @@
 #ifndef _DTLS_GLOBAL_H_
 #define _DTLS_GLOBAL_H_
 
+#if defined(WITH_CONTIKI) && defined(CONTIKI_TARGET_RM090)
+#include <stddef.h> /* for size_t */
+#else
 #include <sys/types.h>
+#endif
 
 #include "tinydtls.h"
 

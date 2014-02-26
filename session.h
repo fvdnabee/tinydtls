@@ -58,6 +58,37 @@ typedef struct {
 } session_t;
 #endif /* WITH_CONTIKI */
 
+#ifdef WITH_CONTIKI
+// fvdabeele: note this macro was copied from session.c as contiki doesn't seem
+// to compile session.c for some reason...reason
+#define _dtls_address_equals_impl(A,B)				\
+  ((A)->size == (B)->size					\
+   && (A)->port == (B)->port					\
+   && uip_ipaddr_cmp(&((A)->addr),&((B)->addr))			\
+   && (A)->ifindex == (B)->ifindex)
+
+// fvdabeele: Note these two inline functions were copied from a previous version of
+// tinydtls
+/**
+ * Resets the given session_t object @p sess to its default
+ * values.  In particular, the member rlen must be initialized to the
+ * available size for storing addresses.
+ *
+ * @param sess The session_t object to initialize.
+ */
+static inline void
+dtls_session_init(session_t *sess) {
+  assert(sess);
+  memset(sess, 0, sizeof(session_t));
+  sess->size = sizeof(sess->addr);
+}
+
+static inline int
+dtls_session_equals(const session_t *a, const session_t *b) {
+  assert(a); assert(b);
+  return _dtls_address_equals_impl(a, b);
+}
+#else
 /** 
  * Resets the given session_t object @p sess to its default
  * values.  In particular, the member rlen must be initialized to the
@@ -72,5 +103,6 @@ void dtls_session_init(session_t *sess);
  * when @p a and @p b differ, @c 1 otherwise.
  */
 int dtls_session_equals(const session_t *a, const session_t *b);
+#endif /* WITH_CONTIKI */
 
 #endif /* _DTLS_SESSION_H_ */
