@@ -45,6 +45,28 @@
 #include "debug.h"
 #include "dtls.h"
 
+#ifdef TINYDTLS_ERBIUM
+// Erbium includes:
+#include "erbium.h"
+
+/* For CoAP-specific example: not required for normal RESTful Web service. */
+#if WITH_COAP == 3
+#include "er-coap-03.h"
+#elif WITH_COAP == 7
+#include "er-coap-07.h"
+#elif WITH_COAP == 12
+#include "er-coap-12.h"
+#elif WITH_COAP == 13
+#include "er-coap-13.h"
+#else
+#warning "Erbium example without CoAP-specifc functionality"
+#endif /* CoAP-specific example */
+
+// Instead of including the entire er-coap-13-engine file, we just declare the one function we need as an external function
+//#include "apps/er-coap-13/er-coap-13-engine.h"
+extern void coap_receive_from_tinydtls(uip_ip6addr_t* srcipaddr, uint16_t srcport, uint8_t* data, uint16_t datalen);
+#endif
+
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 #define UIP_UDP_BUF  ((struct uip_udp_hdr *)&uip_buf[UIP_LLIPH_LEN])
 
@@ -76,15 +98,53 @@ static int
 read_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
+  PRINTF("\nStart of application data\n"); // fvdabeele
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
-
-  PRINTF("\nend of of application data\n"); // fvdabeele
+  PRINTF("\nEnd of application data\n"); // fvdabeele
 
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
   return 0;
 }
+
+#ifdef TINYDTLS_ERBIUM
+static dtls_context_t* latest_peer_ctx;
+static session_t* latest_peer_session;
+
+static int
+read_coap_from_peer(struct dtls_context_t *ctx, 
+	       session_t *session, uint8 *data, size_t len) {
+  size_t i;
+  PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
+  for (i = 0; i < len; i++)
+    PRINTF("%c", data[i]);
+  PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
+
+  /* store ctx and session for use in write_coap_to_latest_peer */
+  latest_peer_ctx = ctx;
+  latest_peer_session = session;
+
+  /* pass result to erbium */
+  coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest peer
+
+  return 0;
+}
+
+extern int
+write_coap_to_latest_peer(uint8_t *data, size_t len) {
+  /* send CoAP message as outgoing application data */
+  dtls_write(latest_peer_ctx, latest_peer_session, data, len);
+
+  size_t i;
+  PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
+  for (i = 0; i < len; i++)
+    PRINTF("%c", data[i]);
+  PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
+
+  return 0;
+}
+#endif
 
 static int
 send_to_peer(struct dtls_context_t *ctx, 
@@ -220,7 +280,11 @@ void
 init_dtls() {
   static dtls_handler_t cb = {
     .write = send_to_peer,
+#ifndef TINYDTLS_ERBIUM
     .read  = read_from_peer,
+#else
+    .read  = read_coap_from_peer,
+#endif
     .event = NULL,
 #ifdef DTLS_PSK
     .get_psk_key = get_psk_key,
@@ -262,6 +326,43 @@ init_dtls() {
     dtls_set_handler(dtls_context, &cb);
 }
 
+/******************************************************************************/
+#ifdef TINYDTLS_ERBIUM
+/*
+ * Resources are defined by the RESOURCE macro.
+ * Signature: resource name, the RESTful methods it handles, and its URI path (omitting the leading slash).
+ */
+RESOURCE(helloworld, METHOD_GET, "hello", "title=\"Hello world: ?len=0..\";rt=\"Text\"");
+
+/*
+ * A handler function named [resource name]_handler must be implemented for each RESOURCE.
+ * A buffer for the response payload is provided through the buffer pointer. Simple resources can ignore
+ * preferred_size and offset, but must respect the REST_MAX_CHUNK_SIZE limit for the buffer.
+ * If a smaller block size is requested for CoAP, the REST framework automatically splits the data.
+ */
+void
+helloworld_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  const char *len = NULL;
+  /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
+  char const * const message = "Hello World! ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy";
+  int length = 12; /*           |<-------->| */
+
+  /* The query string can be retrieved by rest_get_query() or parsed for its key-value pairs. */
+  if (REST.get_query_variable(request, "len", &len)) {
+    length = atoi(len);
+    if (length<0) length = 0;
+    if (length>REST_MAX_CHUNK_SIZE) length = REST_MAX_CHUNK_SIZE;
+    memcpy(buffer, message, length);
+  } else {
+    memcpy(buffer, message, length);
+  }
+
+  REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
+  REST.set_header_etag(response, (uint8_t *) &length, 1);
+  REST.set_response_payload(response, buffer, length);
+}
+#endif
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
 {
@@ -277,6 +378,14 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PROCESS_EXIT();
   }
 
+#ifdef TINYDTLS_ERBIUM
+  /* Initialize the REST engine. */
+  rest_init_engine();
+
+  /* Activate the application-specific resources. */
+  rest_activate_resource(&resource_helloworld);
+#endif
+
   while(1) {
     PROCESS_WAIT_EVENT();
     if(ev == tcpip_event) {
@@ -288,6 +397,22 @@ PROCESS_THREAD(udp_server_process, ev, data)
       read_from_peer(dtls_context, &the_session, readbuf, bytes_read);
     }
     dtls_handle_message(ctx, &session, uip_appdata, bytes_read);
+#endif
+
+#ifdef TINYDTLS_ERBIUM
+//#if defined (PLATFORM_HAS_BUTTON)
+//    if (ev == sensors_event && data == &button_sensor) {
+//      PRINTF("BUTTON\n");
+//#if REST_RES_EVENT
+//      /* Call the event_handler for this application-specific event. */
+//      event_event_handler(&resource_event);
+//#endif
+//#if REST_RES_SEPARATE && WITH_COAP>3
+//      /* Also call the separate response example handler. */
+//      separate_finalize_handler();
+//#endif
+//    }
+//#endif /* PLATFORM_HAS_BUTTON */
 #endif
   }
 

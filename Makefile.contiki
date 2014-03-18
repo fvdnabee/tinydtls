@@ -4,7 +4,7 @@ all: dtls-server dtls-client
 	$(MAKE) $(MAKEFLAGS) ROLE=client dtls-client
 
 CONTIKI=../..
-#CFLAGS += -DPROJECT_CONF_H=\"project-conf.h\"
+CFLAGS += -DPROJECT_CONF_H=\"project-conf.h\"
 
 WITH_UIP6=1
 UIP_CONF_IPV6=1
@@ -18,10 +18,53 @@ else
 		 -DHARD_CODED_ADDRESS=\"aaaa::02:230\"
 endif
 
+WITH_ERBIUM=1
+
+ifeq ($(WITH_ERBIUM), 1)
+# Erbium
+WITH_COAP=13
+
+ifeq ($(WITH_COAP), 13)
+${info INFO: compiling with CoAP-13}
+CFLAGS += -DWITH_COAP=13
+CFLAGS += -DREST=coap_rest_implementation
+CFLAGS += -DUIP_CONF_TCP=0
+APPS += er-coap-13
+else ifeq ($(WITH_COAP), 12)
+${info INFO: compiling with CoAP-12}
+CFLAGS += -DWITH_COAP=12
+CFLAGS += -DREST=coap_rest_implementation
+CFLAGS += -DUIP_CONF_TCP=0
+APPS += er-coap-12
+else ifeq ($(WITH_COAP), 7)
+${info INFO: compiling with CoAP-08}
+CFLAGS += -DWITH_COAP=7
+CFLAGS += -DREST=coap_rest_implementation
+CFLAGS += -DUIP_CONF_TCP=0
+APPS += er-coap-07
+else ifeq ($(WITH_COAP), 3)
+${info INFO: compiling with CoAP-03}
+CFLAGS += -DWITH_COAP=3
+CFLAGS += -DREST=coap_rest_implementation
+CFLAGS += -DUIP_CONF_TCP=0
+APPS += er-coap-03
+else
+${info INFO: compiling with HTTP}
+CFLAGS += -DWITH_HTTP
+CFLAGS += -DREST=http_rest_implementation
+CFLAGS += -DUIP_CONF_TCP=1
+APPS += er-http-engine
+endif
+
+APPS += erbium
+
+CFLAGS += -DTINYDTL_ERBIUM
+endif
+
 CFLAGS += -ffunction-sections
 LDFLAGS += -Wl,--gc-sections,--undefined=_reset_vector__,--undefined=InterruptVectors,--undefined=_copy_data_init__,--undefined=_clear_bss_init__,--undefined=_end_of_init__
 
-CFLAGS += -DUIP_CONF_TCP=0 -DSHA2_USE_INTTYPES_H
+CFLAGS += -DUIP_CONF_TCP=0 -DSHA2_USE_INTTYPES_H -DWITH_CONTIKI -DUIP_CONF_IPV6_RPL  #-DNDEBUG #-DCONTIKI_TINYDTLS_RPL_DAG
 
 APPS += tinydtls/aes tinydtls/sha2 tinydtls/ecc tinydtls
 

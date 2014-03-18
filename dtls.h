@@ -314,6 +314,12 @@ int dtls_renegotiate(dtls_context_t *ctx, const session_t *dst);
 int dtls_write(struct dtls_context_t *ctx, session_t *session, 
 	       uint8 *buf, size_t len);
 
+#ifdef TINYDTLS_ERBIUM
+// We need this declaration otherwise the compiler will optimize
+// write_coap_to_latest_peer out, which will lead to a linker error
+extern int write_coap_to_latest_peer(uint8_t *data, size_t len);
+#endif
+
 /**
  * Checks sendqueue of given DTLS context object for any outstanding
  * packets to be transmitted. 
