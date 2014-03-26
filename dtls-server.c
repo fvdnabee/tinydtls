@@ -67,6 +67,9 @@
 extern void coap_receive_from_tinydtls(uip_ip6addr_t* srcipaddr, uint16_t srcport, uint8_t* data, uint16_t datalen);
 #endif
 
+/* for handling serial-line events: */
+#include "dev/serial-line.h"
+
 #define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
 #define UIP_UDP_BUF  ((struct uip_udp_hdr *)&uip_buf[UIP_LLIPH_LEN])
 
@@ -386,11 +389,29 @@ PROCESS_THREAD(udp_server_process, ev, data)
   rest_activate_resource(&resource_helloworld);
 #endif
 
+  /* initialize serial line */
+  serial_line_init();
+#ifdef CONTIKI_TARGET_RM090
+  uart1_set_input(serial_line_input_byte);
+#endif
+
   while(1) {
     PROCESS_WAIT_EVENT();
     if(ev == tcpip_event) {
       dtls_handle_read(dtls_context);
     }
+    else if(ev == serial_line_event_message) {
+      char *line = (char *)data;
+      if (line[0] == '?' && line[1] == 'E') { // request to print energest values:
+        // Use real energest values here:
+        uint16_t cpu_ticks = 123;
+        uint16_t listen_ticks = 10;
+        uint16_t tx_ticks = 20;
+
+        printf("%d %d %d\n", cpu_ticks, listen_ticks, tx_ticks);
+      }
+    }
+
 #if 0
     if (bytes_read > 0) {
       /* dtls_handle_message(dtls_context, &the_session, readbuf, bytes_read); */
