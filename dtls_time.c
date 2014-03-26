@@ -37,7 +37,9 @@ clock_time_t dtls_clock_offset;
 
 void
 dtls_clock_init(void) {
-  clock_init();
+#ifndef CONTIKI_TARGET_RM090
+  clock_init(); // the clock is already initialized in RM090's platform's file, re-init here will cause already schedulded timers to go out of control
+#endif
   dtls_clock_offset = clock_time();
 }
 
