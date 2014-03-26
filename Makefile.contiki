@@ -58,7 +58,7 @@ endif
 
 APPS += erbium
 
-CFLAGS += -DTINYDTL_ERBIUM
+CFLAGS += -DTINYDTLS_ERBIUM
 endif
 
 CFLAGS += -ffunction-sections
