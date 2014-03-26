@@ -66,7 +66,7 @@ typedef struct dtls_psk_key_t {
   unsigned char *key;    /**< key data */
   size_t key_length;     /**< length of key */
 }
-#if defined(RM090)
+#ifdef CONTIKI_TARGET_RM090
 __attribute__((packed))
 #endif
 dtls_psk_key_t;
@@ -347,7 +347,7 @@ typedef struct __attribute__((__packed__)) {
   uint16 length;		/**< length of the following fragment */
   /* fragment */
 }
-#if defined(RM090)
+#ifdef CONTIKI_TARGET_RM090
 __attribute__((packed))
 #endif
 dtls_record_header_t;
@@ -375,7 +375,7 @@ typedef struct __attribute__((__packed__)) {
   uint24 fragment_length;	/**< Fragment length. */
   /* body */
 } 
-#if defined(RM090)
+#ifdef CONTIKI_TARGET_RM090
 __attribute__((packed))
 #endif
 dtls_handshake_header_t;
@@ -390,7 +390,7 @@ typedef struct __attribute__((__packed__)) {
   /* cipher suite (2 to 2^16 -1 bytes) */
   /* compression method */
 } 
-#if defined(RM090)
+#ifdef CONTIKI_TARGET_RM090
 __attribute__((packed))
 #endif
 dtls_client_hello_t;
@@ -401,7 +401,7 @@ typedef struct __attribute__((__packed__)) {
   uint8 cookie_length;	/**< Length of the included cookie */
   uint8 cookie[];		/**< up to 32 bytes making up the cookie */
 } 
-#if defined(RM090)
+#ifdef CONTIKI_TARGET_RM090
 __attribute__((packed))
 #endif
 dtls_hello_verify_t;  
