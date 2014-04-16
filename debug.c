@@ -45,7 +45,7 @@
 #include "debug.h"
 
 #ifndef NDEBUG
-static int maxlog = DTLS_LOG_WARN;	/* default maximum log level */
+static int maxlog = DTLS_LOG_EMERG;	/* default maximum log level */
 #endif
 
 #ifndef WITH_CONTIKI

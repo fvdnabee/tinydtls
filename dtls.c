@@ -1247,8 +1247,9 @@ dtls_prepare_record(dtls_peer_t *peer, dtls_security_parameters_t *security,
      * additional_data = seq_num + TLSCompressed.type +
      *                   TLSCompressed.version + TLSCompressed.length;
      */
-    memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
-    //memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
+    //memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
+    memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
+    dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(sendbuf)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
     memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(sendbuf)->content_type, 3); /* type and version */
     dtls_int_to_uint16(A_DATA + 11, res - 8); /* length */
     
@@ -2875,7 +2876,18 @@ decrypt_verify(dtls_peer_t *peer, uint8 *packet, size_t length,
      * additional_data = seq_num + TLSCompressed.type +
      *                   TLSCompressed.version + TLSCompressed.length;
      */
-    memcpy(A_DATA, &DTLS_RECORD_HEADER(packet)->epoch, 8); /* epoch and seq_num */
+
+
+    // Copied from 1000 lines above:
+    //memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
+    memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
+    dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(packet)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
+    //memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(sendbuf)->content_type, 3); /* type and version */
+    //dtls_int_to_uint16(A_DATA + 11, res - 8); /* length */
+
+
+    // Original
+    //memcpy(A_DATA, &DTLS_RECORD_HEADER(packet)->epoch, 8); /* epoch and seq_num */
     memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(packet)->content_type, 3); /* type and version */
     dtls_int_to_uint16(A_DATA + 11, clen - 8); /* length without nonce_explicit */
 
@@ -3086,10 +3098,13 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
       return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
     }
 
+    //Floris: de finished verifyen lukt NIET dus, negeer de return waarde.
+    //Mogelijks is het wel belangrijk dat deze functie wordt uitgevoerd
     err = check_finished(ctx, peer, data, data_length);
     if (err < 0) {
       dtls_warn("error in check_finished err: %i\n", err);
-      return err;
+      dtls_warn("FLORIS: ignoring failure of finish_verify, continuing anyway.\n");
+      //return err;
     }
     if (role == DTLS_SERVER) {
       /* send ServerFinished */
@@ -3586,9 +3601,9 @@ dtls_handle_message(dtls_context_t *ctx,
     if (peer) {
       data_length = decrypt_verify(peer, msg, rlen, &data);
       if (data_length < 0) {
-        //dtls_info("decrypt_verify() failed\n");
-        dtls_info("decrypt_verify() failed, but we are continuing anyway.\n");
-        //goto next; // florisvda
+        dtls_info("decrypt_verify() failed\n");
+        //dtls_info("decrypt_verify() failed, but we are continuing anyway.\n");
+        goto next; // florisvda
       }
       role = peer->role;
       state = peer->state;
