@@ -60,6 +60,44 @@
  * server identity hint */
 #define DTLS_PSK_MAX_CLIENT_IDENTITY_LEN	32
 
+unsigned long rx_start_time; // energest
+unsigned long lpm_start_time; // energest
+unsigned long cpu_start_time; // energest
+unsigned long tx_start_time; // energest
+unsigned long irq_start_time; // energest
+
+/* energy measurements ------------------------------------------------------*/
+#include "dev/cc2520/cc2520.h"
+#include "dev/watchdog.h"
+#include "dev/serial-line.h"
+#include "dev/hwconf.h"
+#include "sys/compower.h"
+
+/* Packet sniffer */
+
+static uint32_t packets_received = 0;
+static uint32_t packets_transmitted = 0;
+
+/*---------------------------------------------------------------------------*/
+
+/* CC2520 RX/TX time measurement variables */
+// Note that all times are in timer ticks, usually of the rtimer. For the rm090 this is by default the Timer1_A0 timer
+static volatile uint8_t cc2520_rxtx_status = 1; // variable for persisting the RX and TX active bits from the cc2520 status bytes inbetween SFD ISR calls
+static volatile uint16_t cc2520_sfd_start_time; // time (in rtimer ticks) when SFD comes high, measured in the ISR of the SFD pin (TODO: use interrupt of hardware timer for more precise value)
+static volatile uint16_t cc2520_sfd_end_time; // time (in rtimer ticks) when SFD goes low, measured in the ISR of the SFD pin
+static volatile uint16_t cc2520_sfd_rx_time; // Total time spent receiving a frame (i.e. idle listen time not included) in rtimer ticks
+static volatile uint16_t cc2520_sfd_tx_time; // Total time spent actually transmitting a frame (this includes acks) in rtimer ticks
+static volatile uint16_t cc2520_sfd_rx_counter; // Total number of frames received
+static volatile uint16_t cc2520_sfd_tx_counter; // Total number of frames transmitted (incl. acks), look at RIME_SNIFFER if you don't want acks (unverified...)
+
+/*---------------------------------------------------------------------------*/
+
+void print_stats(int i); // print energy values
+
+/*---------------------------------------------------------------------------*/
+
+
+
 typedef struct dtls_psk_key_t {
   unsigned char *id;     /**< psk identity */
   size_t id_length;      /**< length of psk identity  */

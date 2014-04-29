@@ -27,15 +27,17 @@
  *
  */
 
+
+
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
-
 #include "net/rpl/rpl.h"
-
 #include <string.h>
-
 #include "config.h"
+
+#include <stdio.h>
+#include <stdint.h>
 
 #ifndef DEBUG
 #define DEBUG DEBUG_PRINT
@@ -44,11 +46,11 @@
 
 #include "debug.h"
 #include "dtls.h"
+#include "sys/energest.h"
 
 #ifdef TINYDTLS_ERBIUM
 // Erbium includes:
 #include "erbium.h"
-
 /* For CoAP-specific example: not required for normal RESTful Web service. */
 #if WITH_COAP == 3
 #include "er-coap-03.h"
@@ -62,9 +64,28 @@
 #warning "Erbium example without CoAP-specifc functionality"
 #endif /* CoAP-specific example */
 
+
 // Instead of including the entire er-coap-13-engine file, we just declare the one function we need as an external function
 //#include "apps/er-coap-13/er-coap-13-engine.h"
 extern void coap_receive_from_tinydtls(uip_ip6addr_t* srcipaddr, uint16_t srcport, uint8_t* data, uint16_t datalen);
+#endif
+
+// Resources
+#define REST_RES_EVENT 1
+#define REST_RES_HELLO 1
+
+
+/*---------------------------------------------------------------------------*/
+/* Packet sniffer */
+#include "rime.h"
+void packet_received(void) { packets_received++; }
+void packet_transmitted(int mac_status) { packets_transmitted++; }
+
+RIME_SNIFFER(packet_counter, &packet_received, &packet_transmitted);
+/*---------------------------------------------------------------------------*/
+
+#if defined (PLATFORM_HAS_BUTTON)
+#include "dev/button-sensor.h"
 #endif
 
 /* for handling serial-line events: */
@@ -101,11 +122,11 @@ static int
 read_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  PRINTF("\nStart of application data\n"); // fvdabeele
+  /*PRINTF("\nStart of application data\n"); // fvdabeele
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
   PRINTF("\nEnd of application data\n"); // fvdabeele
-
+	*/
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
   return 0;
@@ -119,11 +140,11 @@ static int
 read_coap_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
+  /*PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
   PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
-
+	*/
   /* store ctx and session for use in write_coap_to_latest_peer */
   latest_peer_ctx = ctx;
   latest_peer_session = session;
@@ -140,11 +161,11 @@ write_coap_to_latest_peer(uint8_t *data, size_t len) {
   dtls_write(latest_peer_ctx, latest_peer_session, data, len);
 
   size_t i;
-  PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
+  /*PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
   PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
-
+	*/
   return 0;
 }
 #endif
@@ -158,10 +179,10 @@ send_to_peer(struct dtls_context_t *ctx,
   uip_ipaddr_copy(&conn->ripaddr, &session->addr);
   conn->rport = session->port;
 
-  PRINTF("send to ");
+  /*PRINTF("send to ");
   PRINT6ADDR(&conn->ripaddr);
   PRINTF(":%u\n", uip_ntohs(conn->rport));
-
+	*/
   uip_udp_packet_send(conn, data, len);
 
   /* Restore server connection to allow data from any node */
@@ -224,19 +245,19 @@ dtls_handle_read(dtls_context_t *ctx) {
   session_t session;
 
   if(uip_newdata()) {
-    uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
-    PRINTF("\n");
+    //uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
+    //PRINTF("\n");
     uip_ipaddr_t temp;
     uip_ipaddr_copy(&temp,&UIP_IP_BUF->srcipaddr);
-    uip_debug_ipaddr_print(&temp);
-    PRINTF("\n");
+    //uip_debug_ipaddr_print(&temp);
+    //PRINTF("\n");
 
     uip_ipaddr_copy(&session.addr, &UIP_IP_BUF->srcipaddr);
     session.port = UIP_UDP_BUF->srcport;
     session.size = sizeof(session.addr) + sizeof(session.port);
     
     uint8 r = dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
-    PRINTF("dtls_handle_message returned %d\n", r);
+    //PRINTF("dtls_handle_message returned %d\n", r);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -246,13 +267,13 @@ print_local_addresses(void)
   int i;
   uint8_t state;
 
-  PRINTF("Server IPv6 addresses: \n");
+  //PRINTF("Server IPv6 addresses: \n");
   for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
     state = uip_ds6_if.addr_list[i].state;
     if(uip_ds6_if.addr_list[i].isused &&
        (state == ADDR_TENTATIVE || state == ADDR_PREFERRED)) {
-      PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
-      PRINTF("\n");
+      //PRINT6ADDR(&uip_ds6_if.addr_list[i].ipaddr);
+      //PRINTF("\n");
     }
   }
 }
@@ -367,6 +388,177 @@ helloworld_handler(void* request, void* response, uint8_t *buffer, uint16_t pref
 }
 #endif
 /*---------------------------------------------------------------------------*/
+#if REST_RES_EVENT && defined TINYDTLS_ERBIUM && defined (PLATFORM_HAS_BUTTON)
+/*
+ * Example for an event resource.
+ * Additionally takes a period parameter that defines the interval to call [name]_periodic_handler().
+ * A default post_handler takes care of subscriptions and manages a list of subscribers to notify.
+ */
+EVENT_RESOURCE(event, METHOD_GET, "sensors/button", "title=\"Event demo\";obs");
+
+void
+event_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
+  /* Usually, a CoAP server would response with the current resource representation. */
+  const char *msg = "It's eventful!";
+  REST.set_response_payload(response, (uint8_t *)msg, strlen(msg));
+
+  /* A post_handler that handles subscriptions/observing will be called for periodic resources by the framework. */
+}
+
+/* Additionally, a handler function named [resource name]_event_handler must be implemented for each PERIODIC_RESOURCE defined.
+ * It will be called by the REST manager process with the defined period. */
+void
+event_event_handler(resource_t *r)
+{
+  static uint16_t event_counter = 0;
+  static char content[12];
+
+  ++event_counter;
+  PRINTF("TICK %u for /%s\n", event_counter, r->url);
+
+	if (event_counter == 1) {
+		printf("******** Start energy measurements \n");
+
+		rx_start_time = energest_type_time(ENERGEST_TYPE_LISTEN); 
+  	lpm_start_time = energest_type_time(ENERGEST_TYPE_LPM);
+  	cpu_start_time = energest_type_time(ENERGEST_TYPE_CPU);
+  	tx_start_time = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+		irq_start_time = energest_type_time(ENERGEST_TYPE_IRQ);
+	} else {
+		printf("******** ENERGY listen %li tx %li cpu %li lpm %li irq %li \n",
+		  	energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time,
+		  	energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time,
+		  	energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time,
+		  	energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time,
+				energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
+		  ); 
+	}
+
+  /* Build notification. */
+  coap_packet_t notification[1]; /* This way the packet can be treated as pointer as usual. */
+  coap_init_message(notification, COAP_TYPE_CON, REST.status.OK, 0 );
+  coap_set_payload(notification, content, snprintf(content, sizeof(content), "EVENT %u", event_counter));
+
+  /* Notify the registered observers with the given message type, observe option, and payload. */
+  REST.notify_subscribers(r, event_counter, notification);
+}
+#endif /* PLATFORM_HAS_BUTTON */
+
+/*---------------------------------------------------------------------------*/
+
+/* P2.0 of the rm090 is hooked up to cc2520 gpio p4, i.e. SFD:
+ * Pin is high when SFD has been received or
+ transmitted. Cleared when leaving RX/TX
+ respectively.
+ */
+// Note: this ISR should only be called for when P2.0 changes state, not for any other pins on port 2 as the push button is also on this port, it should be disabled for now...
+//ISR(PORT2, cc2520_port2_interrupt);
+interrupt(CC2520_IRQ2_VECTOR)
+cc2520_port2_interrupt(void)
+{
+  // First of all get the current timer value
+  rtimer_clock_t clocktime = rtimer_arch_now();
+
+  ENERGEST_ON(ENERGEST_TYPE_IRQ);
+
+  if (P2IFG & 0x01) {
+    //PRINTF("test\n");
+    if (CC2520_SFD_IS_1)
+    {
+      // Start of SFD for RX or TX
+      // Get the status byte via SPI from the CC2520:
+//      uint8_t status;
+//      if(CC2520_SPI_IS_ENABLED()) {
+//    (void)SPI_RXBUF;                                                    
+//        CC2520_GET_STATUS(status);
+//        SPI_WRITE(CC2520_INS_RXBUF);
+//        //(void)SPI_RXBUF;
+//      }
+//      else
+//      {
+//        CC2520_GET_STATUS(status);
+//      }
+
+      // Persist the status for when SFD goes low (note that the status byte is no longer usable when SFD is low):
+      //if ((status & 0x03) == 0x01) // currently receiving
+      //  cc2520_rxtx_status = 1;
+      //else if ((status & 0x03) == 0x02) // currently transmitting
+      //  cc2520_rxtx_status = 2;
+      //else // invalid...
+      //  cc2520_rxtx_status = 0;
+
+      // Save start time:
+      cc2520_sfd_start_time = clocktime;
+
+      // next time we want high to low edge:
+      P2IES |= 0x01;                            // P2.0 Hi/Lo edge
+    }
+    else
+    {
+      // Stop of SFD for RX or TX
+      cc2520_sfd_end_time = clocktime;
+      if (cc2520_rxtx_status == 1) { // last activity on the radio was RX:
+        cc2520_sfd_rx_time += (cc2520_sfd_end_time - cc2520_sfd_start_time);
+        cc2520_sfd_rx_counter++;
+      } else if (cc2520_rxtx_status == 2) { // last activity on the radio was TX:
+        cc2520_sfd_tx_time += (cc2520_sfd_end_time - cc2520_sfd_start_time);
+        cc2520_sfd_tx_counter++;
+      }
+      // Clear status for next time:
+      //cc2520_rxtx_status = 0;
+      cc2520_rxtx_status = 1;
+
+      // next time we want low to high edge:
+      P2IES &= ~0x01;                            // P2.0 Lo/Hi edge
+    }
+    P2IFG &= ~0x01;
+  }
+  else if (P2IFG & 0x02) {
+    if(P2IN & 0x02)
+      cc2520_rxtx_status = 2;
+    else
+      cc2520_rxtx_status = 1;
+    //PRINTF("test2\n");
+
+    P2IFG &= ~0x02;
+  }
+
+	// PRINTF("INTERRUPT\n");
+	//PRINTF("INT %d\n", P2IFG);
+
+  // Clear IV:
+  ENERGEST_OFF(ENERGEST_TYPE_IRQ);
+}
+
+/******************************************************************************/
+/* print energy measurements */
+void print_stats(int i) {
+//	printf("%i;%li;%li;%li;%li;%li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
+//												, i
+//												, clock_time()
+//												, energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time
+//												, energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time
+//												, energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time
+//												, energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time
+//												, energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
+//												, compower_idle_activity.transmit, compower_idle_activity.listen
+//												, packets_transmitted, packets_received
+//												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time 
+//												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time);
+  printf("%li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
+												, energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time
+												, energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
+												, energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time
+												, energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time
+												, packets_transmitted, packets_received
+												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time
+												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time); 
+
+}
+
+/******************************************************************************/
 PROCESS_THREAD(udp_server_process, ev, data)
 {
   PROCESS_BEGIN();
@@ -381,12 +573,47 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PROCESS_EXIT();
   }
 
-#ifdef TINYDTLS_ERBIUM
+#if defined TINYDTLS_ERBIUM
   /* Initialize the REST engine. */
   rest_init_engine();
 
+	/* Rime sniffer */
+  rime_sniffer_add(&packet_counter);
+	
+  
+	// Configure CC2520's GPIO4 SFD pin on the msp430:
+  P2REN |= 0x01;                            // Enable P2.0 internal resistance
+  P2OUT |= 0x01;                            // Set P2.0 as pull-Up resistance
+
+  P2IE |= 0x01;                             // P2.0 interrupt enabled
+  //P2DIR &= ~0x01;                           // P2.0 as input pin?
+	
+  //Start with low to high edge:
+  P2IES &= ~0x01;                            // P2.0 Lo/Hi edge
+  P2IFG &= ~0x01;                           // P2.0 IFG cleared
+
+  // Configure cc2520's GPIO5 tx_active pin on msp430
+  P2REN |= 0x02;                            // Enable P2.0 internal resistance
+  P2OUT |= 0x02;                            // Set P2.0 as pull-Up resistance
+
+  P2IE |= 0x02;                             // P2.0 interrupt enabled
+  //P2DIR &= ~0x02;                           // P2.0 as input pin?
+
+  //Start with low to high edge:
+  P2IES &= ~0x02;                            // P2.0 Lo/Hi edge
+  P2IFG &= ~0x02;                           // P2.0 IFG cleared
+
   /* Activate the application-specific resources. */
-  rest_activate_resource(&resource_helloworld);
+#if REST_RES_HELLO
+	rest_activate_resource(&resource_helloworld);
+#endif
+#if defined (PLATFORM_HAS_BUTTON) && REST_RES_EVENT
+  rest_activate_event_resource(&resource_event);
+#endif
+#if defined (PLATFORM_HAS_BUTTON) && (REST_RES_EVENT || (REST_RES_SEPARATE && WITH_COAP > 3))
+  SENSORS_ACTIVATE(button_sensor);
+#endif
+
 #endif
 
   /* initialize serial line */
@@ -395,22 +622,43 @@ PROCESS_THREAD(udp_server_process, ev, data)
   uart1_set_input(serial_line_input_byte);
 #endif
 
+	static int event_counter = 0; // energest
+  PRINTF("init energest\n");
+  rx_start_time = energest_type_time(ENERGEST_TYPE_LISTEN); 
+  lpm_start_time = energest_type_time(ENERGEST_TYPE_LPM);
+  cpu_start_time = energest_type_time(ENERGEST_TYPE_CPU);
+  tx_start_time = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+  irq_start_time = energest_type_time(ENERGEST_TYPE_IRQ);
+
   while(1) {
-    PROCESS_WAIT_EVENT();
+
+    PROCESS_YIELD(); //PROCESS_WAIT_EVENT(); --> werkt niet samen met hardware interupt!
+
     if(ev == tcpip_event) {
       dtls_handle_read(dtls_context);
+			//print_stats();
     }
+
+		#if defined (PLATFORM_HAS_BUTTON) && defined TINYDTLS_ERBIUM
+    else if (ev == sensors_event && data == &button_sensor) {
+      PRINTF("BUTTON\n");
+			#if REST_RES_EVENT
+      /* Call the event_handler for this application-specific event. */
+      event_event_handler(&resource_event);
+			#endif
+		}
+		#endif
+
     else if(ev == serial_line_event_message) {
       char *line = (char *)data;
       if (line[0] == '?' && line[1] == 'E') { // request to print energest values:
-        // Use real energest values here:
-        uint16_t cpu_ticks = 123;
-        uint16_t listen_ticks = 10;
-        uint16_t tx_ticks = 20;
+				event_counter += 1;
+				if (event_counter == 1) { // init
 
-        printf("%d %d %d\n", cpu_ticks, listen_ticks, tx_ticks);
-      }
-    }
+				}
+				print_stats(15);
+    	}
+		}
 
 #if 0
     if (bytes_read > 0) {
@@ -420,7 +668,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
     dtls_handle_message(ctx, &session, uip_appdata, bytes_read);
 #endif
 
-#ifdef TINYDTLS_ERBIUM
+
+
+//#ifdef TINYDTLS_ERBIUM
 //#if defined (PLATFORM_HAS_BUTTON)
 //    if (ev == sensors_event && data == &button_sensor) {
 //      PRINTF("BUTTON\n");
@@ -434,9 +684,8 @@ PROCESS_THREAD(udp_server_process, ev, data)
 //#endif
 //    }
 //#endif /* PLATFORM_HAS_BUTTON */
-#endif
+//#endif
   }
-
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
