@@ -40,7 +40,7 @@
 #include <stdint.h>
 
 #ifndef DEBUG
-#define DEBUG DEBUG_PRINT
+#define DEBUG DEBUG_NONE
 #endif
 #include "net/ip/uip-debug.h"
 
@@ -122,11 +122,11 @@ static int
 read_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  /*PRINTF("\nStart of application data\n"); // fvdabeele
+  PRINTF("\nread_from_peer(): Start of application data\n"); // fvdabeele
   for (i = 0; i < len; i++)
     PRINTF("%c", data[i]);
   PRINTF("\nEnd of application data\n"); // fvdabeele
-	*/
+	
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
   return 0;
@@ -140,32 +140,34 @@ static int
 read_coap_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  /*PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
+  PRINTF("\nread_coap_from_peer(): Start of received application data (CoAP)"); // fvdabeele
+  printf(" %d bytes:\n", len);
   for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
+    PRINTF("%02x ", data[i]);
   PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
-	*/
+	
   /* store ctx and session for use in write_coap_to_latest_peer */
   latest_peer_ctx = ctx;
   latest_peer_session = session;
 
   /* pass result to erbium */
-  coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest peer
+  coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest_peer
 
   return 0;
 }
 
 extern int
 write_coap_to_latest_peer(uint8_t *data, size_t len) {
+  size_t i;
+  PRINTF("\nwrite_coap_to_latest_peer(): start of application data to send (CoAP)"); // fvdabeele
+  printf(" %d bytes:\n", len);
+  for (i = 0; i < len; i++)
+    PRINTF("%02x ", data[i]);
+  PRINTF("\nEnd of of application data to send (CoAP)\n"); // fvdabeele
+
   /* send CoAP message as outgoing application data */
   dtls_write(latest_peer_ctx, latest_peer_session, data, len);
 
-  size_t i;
-  /*PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
-  for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
-  PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
-	*/
   return 0;
 }
 #endif
@@ -341,7 +343,7 @@ init_dtls() {
 #endif /* UIP_CONF_ROUTER */
 
   server_conn = udp_new(NULL, 0, NULL);
-  udp_bind(server_conn, UIP_HTONS(5683));
+  udp_bind(server_conn, UIP_HTONS(5684));
 
   dtls_set_log_level(DTLS_LOG_DEBUG);
 
@@ -547,7 +549,8 @@ void print_stats(int i) {
 //												, packets_transmitted, packets_received
 //												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time 
 //												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time);
-  printf("%li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
+
+  printf("Energest: %li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
 												, energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time
 												, energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
 												, energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time
@@ -576,6 +579,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
 #if defined TINYDTLS_ERBIUM
   /* Initialize the REST engine. */
   rest_init_engine();
+#endif
 
 	/* Rime sniffer */
   rime_sniffer_add(&packet_counter);
@@ -603,6 +607,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   P2IES &= ~0x02;                            // P2.0 Lo/Hi edge
   P2IFG &= ~0x02;                           // P2.0 IFG cleared
 
+#if defined TINYDTLS_ERBIUM
   /* Activate the application-specific resources. */
 #if REST_RES_HELLO
 	rest_activate_resource(&resource_helloworld);
@@ -635,6 +640,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PROCESS_YIELD(); //PROCESS_WAIT_EVENT(); --> werkt niet samen met hardware interupt!
 
     if(ev == tcpip_event) {
+      PRINTF("dtls-server: tcpip_event, calling dtls_handle_read\n");
       dtls_handle_read(dtls_context);
 			//print_stats();
     }

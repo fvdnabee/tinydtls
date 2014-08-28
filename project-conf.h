@@ -32,8 +32,14 @@
 #ifndef PROJECT_ERBIUM_CONF_H_
 #define PROJECT_ERBIUM_CONF_H_
 
+#define ENERGEST_CONF_ON	1
+
 /* Some platforms have weird includes. */
 #undef IEEE802154_CONF_PANID
+
+#undef NETSTACK_CONF_MAC
+#define NETSTACK_CONF_MAC     csma_driver
+/* #define NETSTACK_CONF_MAC     nullmac_driver */
 
 /* Disabling RDC for demo purposes. Core updates often require more memory. */
 /* For projects, optimize memory and enable RDC again. */
@@ -79,8 +85,8 @@
 #define UIP_CONF_MAX_ROUTES   10
 
 /* Reduce 802.15.4 frame queue to save RAM. */
-#undef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM       4
+//#undef QUEUEBUF_CONF_NUM
+//#define QUEUEBUF_CONF_NUM       4
 
 #undef SICSLOWPAN_CONF_FRAG
 #define SICSLOWPAN_CONF_FRAG	1

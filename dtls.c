@@ -27,7 +27,6 @@
 #include "tinydtls.h"
 #include "config.h"
 #include "dtls_time.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef HAVE_ASSERT_H
@@ -70,15 +69,13 @@
   HASH_DELETE(hh,head,delptr)
 #endif /* WITH_CONTIKI */
 
-//#if defined(RM090)
-//#define DTLS_RH_LENGTH 13 // sizeof(dtls_record_header_t) returns 14
-//#define DTLS_HS_LENGTH 12
-//#define DTLS_CH_LENGTH 34 /* no variable length fields! */
-//#else
+// fvdabeele: NO_DEBUG_DUMP: print debug statements with the exception of dump
+// and dumphex statements (i.e. all don't print keying material)
+#define NO_DEBUG_DUMP 1
+
 #define DTLS_RH_LENGTH sizeof(dtls_record_header_t)
 #define DTLS_HS_LENGTH sizeof(dtls_handshake_header_t)
 #define DTLS_CH_LENGTH sizeof(dtls_client_hello_t) /* no variable length fields! */
-//#endif
 
 #define DTLS_COOKIE_LENGTH_MAX 32
 #define DTLS_CH_LENGTH_MAX sizeof(dtls_client_hello_t) + DTLS_COOKIE_LENGTH_MAX + 12 + 26
@@ -417,7 +414,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint8(buf, type);
   buf += sizeof(uint8);
 
-  dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() length = %d\n", length); // fvdabeele
+  //dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() length = %d\n", length); // fvdabeele
   dtls_int_to_uint24(buf, length);
   buf += sizeof(uint24);
 
@@ -435,7 +432,7 @@ dtls_set_handshake_header(uint8 type, dtls_peer_t *peer,
   dtls_int_to_uint24(buf, frag_offset);
   buf += sizeof(uint24);
 
-  dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() fragment_length = %d\n", frag_length); // fvdabeele
+  //dsrv_log(DTLS_LOG_DEBUG, "dtls_set_handshake_header() fragment_length = %d\n", frag_length); // fvdabeele
   dtls_int_to_uint24(buf, frag_length);
   buf += sizeof(uint24);
   
@@ -622,7 +619,9 @@ calculate_key_block(dtls_context_t *ctx,
       dtls_crit("the psk was too long, for the pre master secret\n");
       return dtls_alert_fatal_create(DTLS_ALERT_INTERNAL_ERROR);
     }
+#ifndef NO_DEBUG_DUMP
     dtls_debug_hexdump("psk", psk->key, psk->key_length);
+#endif
 
     break;
   }
@@ -647,9 +646,11 @@ calculate_key_block(dtls_context_t *ctx,
     return dtls_alert_fatal_create(DTLS_ALERT_INTERNAL_ERROR);
   }
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("client_random", handshake->tmp.random.client, DTLS_RANDOM_LENGTH);
   dtls_debug_dump("server_random", handshake->tmp.random.server, DTLS_RANDOM_LENGTH);
   dtls_debug_dump("pre_master_secret", pre_master_secret, pre_master_len);
+#endif
 
   dtls_prf(pre_master_secret, pre_master_len,
 	   PRF_LABEL(master), PRF_LABEL_SIZE(master),
@@ -658,7 +659,9 @@ calculate_key_block(dtls_context_t *ctx,
 	   master_secret,
 	   DTLS_MASTER_SECRET_LENGTH);
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("master_secret", master_secret, DTLS_MASTER_SECRET_LENGTH);
+#endif
 
   /* create key_block from master_secret
    * key_block = PRF(master_secret,
@@ -673,7 +676,9 @@ calculate_key_block(dtls_context_t *ctx,
 	   dtls_kb_size(security, role));
 
   memcpy(handshake->tmp.master_secret, master_secret, DTLS_MASTER_SECRET_LENGTH);
+#ifndef NO_DEBUG_DUMP
   dtls_debug_keyblock(security);
+#endif
 
   security->cipher = handshake->cipher;
   security->compression = handshake->compression;
@@ -1047,7 +1052,9 @@ check_client_keyexchange(dtls_context_t *ctx,
 
 static inline void
 update_hs_hash(dtls_peer_t *peer, uint8 *data, size_t length) {
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("add MAC data", data, length);
+#endif
   dtls_hash_update(&peer->handshake_params->hs_state.hs_hash, data, length);
 }
 
@@ -1122,8 +1129,10 @@ check_finished(dtls_context_t *ctx, dtls_peer_t *peer,
 	   buf, digest_length,
 	   b.verify_data, sizeof(b.verify_data));
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("d:", data + DTLS_HS_LENGTH, sizeof(b.verify_data));
   dtls_debug_dump("v:", b.verify_data, sizeof(b.verify_data));
+#endif
   return equals(data + DTLS_HS_LENGTH, b.verify_data, sizeof(b.verify_data))
     ? 0
     : -1;
@@ -1238,9 +1247,11 @@ dtls_prepare_record(dtls_peer_t *peer, dtls_security_parameters_t *security,
 	   dtls_kb_iv_size(security, peer->role));
     memcpy(nonce + dtls_kb_iv_size(security, peer->role), start, 8); /* epoch + seq_num */
 
+#ifndef NO_DEBUG_DUMP
     dtls_debug_dump("nonce:", nonce, DTLS_CCM_BLOCKSIZE);
     dtls_debug_dump("key:", dtls_kb_local_write_key(security, peer->role),
 		    dtls_kb_key_size(security, peer->role));
+#endif
     
     /* re-use N to create additional data according to RFC 5246, Section 6.2.3.3:
      * 
@@ -1249,7 +1260,7 @@ dtls_prepare_record(dtls_peer_t *peer, dtls_security_parameters_t *security,
      */
     //memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
     memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
-    dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(sendbuf)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
+    //dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(sendbuf)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
     memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(sendbuf)->content_type, 3); /* type and version */
     dtls_int_to_uint16(A_DATA + 11, res - 8); /* length */
     
@@ -1262,7 +1273,9 @@ dtls_prepare_record(dtls_peer_t *peer, dtls_security_parameters_t *security,
       return res;
 
     res += 8;			/* increment res by size of nonce_explicit */
+#ifndef NO_DEBUG_DUMP
     dtls_debug_dump("message:", start, res);
+#endif
   }
 
   /* fix length of fragment in sendbuf */
@@ -1382,9 +1395,13 @@ dtls_send_multi(dtls_context_t *ctx, dtls_peer_t *peer,
   /* if (peer && MUST_HASH(peer, type, buf, buflen)) */
   /*   update_hs_hash(peer, buf, buflen); */
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_hexdump("send header", sendbuf, sizeof(dtls_record_header_t));
+#endif
   for (i = 0; i < buf_array_len; i++) {
+#ifndef NO_DEBUG_DUMP
     dtls_debug_hexdump("send unencrypted", buf_array[i], buf_len_array[i]);
+#endif
     overall_len += buf_len_array[i];
   }
 
@@ -1431,6 +1448,8 @@ dtls_send_multi(dtls_context_t *ctx, dtls_peer_t *peer,
   /* Guess number of bytes application data actually sent:
    * dtls_prepare_record() tells us in len the number of bytes to
    * send, res will contain the bytes actually sent. */
+	if (type == DTLS_CT_APPLICATION_DATA)
+		print_stats(12); // Tom
   return res <= 0 ? res : overall_len - (len - res);
 }
 
@@ -1512,7 +1531,9 @@ dtls_verify_peer(dtls_context_t *ctx,
   if (err < 0)
     return err;
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("create cookie", mycookie, len);
+#endif
 
   assert(len == DTLS_COOKIE_LENGTH);
     
@@ -1523,7 +1544,9 @@ dtls_verify_peer(dtls_context_t *ctx,
     return err;
   }
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("compare with cookie", cookie, len);
+#endif
 
   /* check if cookies match */
   if (len == DTLS_COOKIE_LENGTH && memcmp(cookie, mycookie, len) == 0) {
@@ -1539,6 +1562,7 @@ dtls_verify_peer(dtls_context_t *ctx,
 
   /* ClientHello did not contain any valid cookie, hence we send a
    * HelloVerify request. */
+	print_stats(0); // Tom
 
   dtls_int_to_uint16(p, DTLS_VERSION);
   p += sizeof(uint16);
@@ -1555,6 +1579,7 @@ dtls_verify_peer(dtls_context_t *ctx,
   err = dtls_send_handshake_msg_hash(ctx, peer, session,
 				     DTLS_HT_HELLO_VERIFY_REQUEST,
 				     buf, p - buf, 0);
+	print_stats(1); // Tom
   if (err < 0) {
     dtls_warn("cannot send HelloVerify request\n");
   }
@@ -2030,6 +2055,7 @@ dtls_send_server_hello_msgs(dtls_context_t *ctx, dtls_peer_t *peer)
   int res;
 
   res = dtls_send_server_hello(ctx, peer);
+	print_stats(3); // Tom
 
   if (res < 0) {
     dtls_debug("dtls_server_hello: cannot prepare ServerHello record\n");
@@ -2085,6 +2111,7 @@ dtls_send_server_hello_msgs(dtls_context_t *ctx, dtls_peer_t *peer)
 
     if (psk->id_length) {
       res = dtls_send_server_key_exchange_psk(ctx, peer, psk);
+			print_stats(4); // Tom
 
       if (res < 0) {
 	dtls_debug("dtls_server_key_exchange_psk: cannot send server key exchange record\n");
@@ -2095,6 +2122,7 @@ dtls_send_server_hello_msgs(dtls_context_t *ctx, dtls_peer_t *peer)
 #endif /* DTLS_PSK */
 
   res = dtls_send_server_hello_done(ctx, peer);
+	print_stats(5); // Tom
 
   if (res < 0) {
     dtls_debug("dtls_server_hello: cannot prepare ServerHelloDone record\n");
@@ -2240,7 +2268,9 @@ dtls_send_finished(dtls_context_t *ctx, dtls_peer_t *peer,
 	   hash, length,
 	   p, DTLS_FIN_LENGTH);
 
+#ifndef NO_DEBUG_DUMP
   dtls_debug_dump("server finished MAC", p, DTLS_FIN_LENGTH);
+#endif
 
   p += DTLS_FIN_LENGTH;
 
@@ -2866,10 +2896,12 @@ decrypt_verify(dtls_peer_t *peer, uint8 *packet, size_t length,
     *cleartext += 8;
     clen -= 8;
 
+#ifndef NO_DEBUG_DUMP
     dtls_debug_dump("nonce", nonce, DTLS_CCM_BLOCKSIZE);
     dtls_debug_dump("key", dtls_kb_remote_write_key(security, peer->role),
 		    dtls_kb_key_size(security, peer->role));
     dtls_debug_dump("ciphertext", *cleartext, clen);
+#endif
 
     /* re-use N to create additional data according to RFC 5246, Section 6.2.3.3:
      * 
@@ -2881,7 +2913,7 @@ decrypt_verify(dtls_peer_t *peer, uint8 *packet, size_t length,
     // Copied from 1000 lines above:
     //memcpy(A_DATA, &DTLS_RECORD_HEADER(sendbuf)->epoch, 8); /* epoch and seq_num */ // aangepast door Tom
     memcpy(A_DATA, nonce + dtls_kb_iv_size(security, peer->role), 8); // copy the explicit_nonce here from the received msg
-    dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(packet)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
+    //dtls_debug("TOM: nonces %s vs %s\n", DTLS_RECORD_HEADER(packet)->epoch, nonce+dtls_kb_iv_size(security, peer->role)); // Tom
     //memcpy(A_DATA + 8,  &DTLS_RECORD_HEADER(sendbuf)->content_type, 3); /* type and version */
     //dtls_int_to_uint16(A_DATA + 11, res - 8); /* length */
 
@@ -2902,7 +2934,9 @@ decrypt_verify(dtls_peer_t *peer, uint8 *packet, size_t length,
       printf("decrypt_verify(): found %i bytes cleartext\n", clen);
 #endif
       dtls_security_params_free_other(peer);
+#ifndef NO_DEBUG_DUMP
       dtls_debug_dump("cleartext", *cleartext, clen);
+#endif
     }
   }
   return clen;
@@ -3092,19 +3126,18 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
     break;
 
   case DTLS_HT_FINISHED:
+
     /* expect a Finished message from server */
 
     if (state != DTLS_STATE_WAIT_FINISHED) {
       return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
     }
 
-    //Floris: de finished verifyen lukt NIET dus, negeer de return waarde.
-    //Mogelijks is het wel belangrijk dat deze functie wordt uitgevoerd
+		print_stats(8); // Tom
     err = check_finished(ctx, peer, data, data_length);
     if (err < 0) {
       dtls_warn("error in check_finished err: %i\n", err);
-      dtls_warn("FLORIS: ignoring failure of finish_verify, continuing anyway.\n");
-      //return err;
+      return err;
     }
     if (role == DTLS_SERVER) {
       /* send ServerFinished */
@@ -3112,6 +3145,7 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
 
       /* send change cipher spec message and switch to new configuration */
       err = dtls_send_ccs(ctx, peer);
+			print_stats(9); // Tom
       if (err < 0) {
         dtls_warn("cannot send CCS message\n");
         return err;
@@ -3120,6 +3154,7 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
       dtls_security_params_switch(peer);
 
       err = dtls_send_finished(ctx, peer, PRF_LABEL(server), PRF_LABEL_SIZE(server));
+			print_stats(10); // Tom
       if (err < 0) {
         dtls_warn("sending server Finished failed\n");
         return err;
@@ -3138,6 +3173,7 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
    ************************************************************************/
 
   case DTLS_HT_CLIENT_KEY_EXCHANGE:
+		print_stats(6); // Tom
     /* handle ClientHello, update msg and msglen and goto next if not finished */
 
     if (state != DTLS_STATE_WAIT_CLIENTKEYEXCHANGE) {
@@ -3183,7 +3219,7 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
 
       // Tom
       //return dtls_alert_fatal_create(DTLS_ALERT_UNEXPECTED_MESSAGE);
-      dtls_warn("TOM: unexpected message swapped for server send hello");
+      //dtls_warn("TOM: unexpected message swapped for server send hello"); // Tom
       return dtls_send_server_hello_done(ctx,peer);
     }
 
@@ -3215,6 +3251,7 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
       /* msg contains a Client Hello with a valid cookie, so we can
        * safely create the server state machine and continue with
        * the handshake. */
+			print_stats(2); // Tom
       peer = dtls_new_peer(session);
       if (!peer) {
         dtls_alert("cannot create peer\n");
@@ -3256,7 +3293,44 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
     }
 
     /* update finish MAC */
-    update_hs_hash(peer, data, data_length);
+    // fvdabeele: calling update_hash_hash with data_length > 63 gives mspsim Illegal
+    // read error like:
+    // MSP430: **** Illegal read - misaligned word from $03e4f at $0bdd6
+    // Stack Trace: number of calls: 21 PC: $0bdd6
+    //  SHA256_Transform (../../apps/tinydtls/sha2/sha2.c) called from PC: $0c48c (elapsed: 8619)
+    //  SHA256_Update (../../apps/tinydtls/sha2/sha2.c) called from PC: $086a2 (elapsed: 8696)
+    //  update_hs_hash (local in .//dtls.c) called from PC: $09e92 (elapsed: 383880)
+    //  handle_handshake_msg (local in .//dtls.c) called from PC: $0a78a (elapsed: 2269241)
+    //  dtls_handle_message (.//dtls.c) called from PC: $066b0 (elapsed: 3619764)
+    //  process_thread_udp_server_process (local in .//dtls-server.c) called from PC: $11b56 (elapsed: 3731214)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11d64 (elapsed: 3731249)
+    //  process_post_synch (../../core/sys/process.c) called from PC: $12770 (elapsed: 3731261)
+    //  tcpip_uipcall (../../core/net/ip/tcpip.c) called from PC: $13d94 (elapsed: 3731288)
+    //  uip_process (../../core/net/ipv6/uip6.c) called from PC: $1270e (elapsed: 3733754)
+    //  process_thread_tcpip_process (local in ../../core/net/ip/tcpip.c) called from PC: $11b56 (elapsed: 3733788)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11d64 (elapsed: 3733823)
+    //  process_post_synch (../../core/sys/process.c) called from PC: $12520 (elapsed: 3733835)
+    //  tcpip_input (../../core/net/ip/tcpip.c) called from PC: $12f68 (elapsed: 3733844)
+    //  input (local in ../../core/net/ipv6/sicslowpan.c) called from PC: $1566e (elapsed: 3735501)
+    //  packet_input (local in ../../core/net/mac/nullmac.c) called from PC: $156ee (elapsed: 3735508)
+    //  packet_input (local in ../../core/net/mac/nullrdc.c) called from PC: $10ee6 (elapsed: 3870695)
+    //  process_thread_cc2520_process (local in ../../dev/cc2520/cc2520.c) called from PC: $11b56 (elapsed: 3876956)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11c24 (elapsed: 3876991)
+    //  do_poll (local in ../../core/sys/process.c) called from PC: $11c66 (elapsed: 3877096)
+    //  process_run (../../core/sys/process.c) called from PC: $05d38 (elapsed: 3877111)
+    // WARN [Thread-33] (MspMote.java:226) - 2: # MSP430[MISALIGNED_READ]: **** Illegal read - misaligned word from $03e4f at $0bdd6
+
+    // Work-around: provide blocks of 63 bytes to update_hs_hash
+#define TINYDTLS_SHA256_PIECE_SIZE 63
+    if (data_length > TINYDTLS_SHA256_PIECE_SIZE) {
+      dtls_debug_dump("hashing in pieces of PIECE_SIZE", data, data_length);
+      int i;
+      for (i = 0; i < data_length/TINYDTLS_SHA256_PIECE_SIZE; i++)
+        update_hs_hash(peer, data+i*TINYDTLS_SHA256_PIECE_SIZE, TINYDTLS_SHA256_PIECE_SIZE);
+      update_hs_hash(peer, data+i*TINYDTLS_SHA256_PIECE_SIZE, data_length - i*TINYDTLS_SHA256_PIECE_SIZE);
+    } else {
+      update_hs_hash(peer, data, data_length);
+    }
 
     err = dtls_send_server_hello_msgs(ctx, peer);
     if (err < 0) {
@@ -3449,18 +3523,14 @@ handle_ccs(dtls_context_t *ctx, dtls_peer_t *peer,
   if (data_length < 1 || data[0] != 1)
     return dtls_alert_fatal_create(DTLS_ALERT_DECODE_ERROR);
 
-  dtls_info("handle_ccs() 1");
   /* Just change the cipher when we are on the same epoch */
   if (peer->role == DTLS_SERVER) {
-  dtls_info("handle_ccs() 2");
     err = calculate_key_block(ctx, handshake, peer,
 			      &peer->session, peer->role);
     if (err < 0) {
-  dtls_info("handle_ccs() 3");
       return err;
     }
   }
-  dtls_info("handle_ccs() 4");
   
   peer->state = DTLS_STATE_WAIT_FINISHED;
 
@@ -3493,6 +3563,8 @@ handle_alert(dtls_context_t *ctx, dtls_peer_t *peer,
    * used by peer is released.
    */
   if (data[0] == DTLS_ALERT_LEVEL_FATAL || data[1] == DTLS_ALERT_CLOSE_NOTIFY) {
+		print_stats(12); // Tom
+
     dtls_alert("%d invalidate peer\n", data[1]);
     
 #ifndef WITH_CONTIKI
@@ -3518,8 +3590,10 @@ handle_alert(dtls_context_t *ctx, dtls_peer_t *peer,
     /* If state is DTLS_STATE_CLOSING, we have already sent a
      * close_notify so, do not send that again. */
     if (peer->state != DTLS_STATE_CLOSING) {
+			print_stats(13); // Tom
       peer->state = DTLS_STATE_CLOSING;
       dtls_send_alert(ctx, peer, DTLS_ALERT_LEVEL_FATAL, DTLS_ALERT_CLOSE_NOTIFY);
+			print_stats(14); // Tom
     } else
       peer->state = DTLS_STATE_CLOSED;
     break;
@@ -3587,24 +3661,26 @@ dtls_handle_message(dtls_context_t *ctx,
     dtls_debug("dtls_handle_message: FOUND PEER\n");
   }
 
-  dtls_debug("dtls_handle_message: pre-while\n"); //fvdabeele
+ // dtls_debug("dtls_handle_message: pre-while\n"); //fvdabeele
   
-  dtls_info("msg[0]=%x, msg[1]=%x, msg[2]=%x,  msglen=%d\n", msg[0],msg[1], msg[2], msglen); // fvdabeele
-  dtls_info("HIGH(DTLS_VERSION) = %x, LOW(DTLS_VERSION) = %x\n", HIGH(DTLS_VERSION),LOW(DTLS_VERSION)); // fvdabeele
+  //dtls_info("msg[0]=%x, msg[1]=%x, msg[2]=%x,  msglen=%d\n", msg[0],msg[1], msg[2], msglen); // fvdabeele
+  //dtls_info("HIGH(DTLS_VERSION) = %x, LOW(DTLS_VERSION) = %x\n", HIGH(DTLS_VERSION),LOW(DTLS_VERSION)); // fvdabeele
 
   while ((rlen = is_record(msg,msglen))) {
     dtls_peer_type role;
     dtls_state_t state;
 
-    dtls_debug("rlen=%d, msglen=%d\\n", rlen, msglen);
-    dtls_debug("got packet %d (%d bytes)\n", msg[0], rlen);
+   //dtls_debug("rlen=%d, msglen=%d\\n", rlen, msglen); // fvdabeele
+   //dtls_debug("got packet %d (%d bytes)\n", msg[0], rlen); // fvdabeele
     if (peer) {
       data_length = decrypt_verify(peer, msg, rlen, &data);
+      /* fvdabeele: sometimes decrypt_verify fails */
       if (data_length < 0) {
-        dtls_info("decrypt_verify() failed\n");
-        //dtls_info("decrypt_verify() failed, but we are continuing anyway.\n");
-        goto next; // florisvda
-      }
+        dtls_warn("decrypt_verify() failed, but we are continuing anyway.\n"); // fvdabeele
+        goto next; // fvdabeele
+      } //else {
+				//dtls_info("decrypt_verify() OK\n");
+			//}
       role = peer->role;
       state = peer->state;
     } else {
@@ -3615,8 +3691,10 @@ dtls_handle_message(dtls_context_t *ctx,
       role = DTLS_SERVER;
     }
 
+#ifndef NO_DEBUG_DUMP
     dtls_debug_hexdump("receive header", msg, sizeof(dtls_record_header_t));
     dtls_debug_hexdump("receive unencrypted", data, data_length);
+#endif
 
     /* Handle received record according to the first byte of the
      * message, i.e. the subprotocol. We currently do not support
@@ -3629,6 +3707,7 @@ dtls_handle_message(dtls_context_t *ctx,
       if (peer) {
         dtls_stop_retransmission(ctx, peer);
       }
+			print_stats(7); // Tom
       err = handle_ccs(ctx, peer, msg, data, data_length);
       if (err < 0) {
 	dtls_warn("error while handling ChangeCipherSpec package\n");
@@ -3644,9 +3723,9 @@ dtls_handle_message(dtls_context_t *ctx,
       err = handle_alert(ctx, peer, msg, data, data_length);
       if (err < 0) {
         dtls_warn("received wrong package\n");
-	/* handle alert has invalidated peer */
-	peer = NULL;
-	return err;
+        /* handle alert has invalidated peer */
+        peer = NULL;
+        return err;
       }
       break;
 
@@ -3665,6 +3744,8 @@ dtls_handle_message(dtls_context_t *ctx,
       break;
 
     case DTLS_CT_APPLICATION_DATA:
+			print_stats(11); // Tom
+
       dtls_info("** application data:\n");
       if (!peer) {
         dtls_warn("no peer available, send an alert\n");
@@ -3683,7 +3764,7 @@ dtls_handle_message(dtls_context_t *ctx,
     msg += rlen;
     msglen -= rlen;
   }
-  dtls_debug("dtls_handle_message: post-while\n"); //fvdabeele
+  //dtls_debug("dtls_handle_message: post-while\n"); //fvdabeele
 
   return 0;
 }
@@ -3801,7 +3882,7 @@ dtls_connect_peer(dtls_context_t *ctx, dtls_peer_t *peer) {
   res = dtls_send_client_hello(ctx, peer, NULL, 0);
   if (res < 0)
     dtls_warn("cannot send ClientHello\n");
-  else 
+  else
     peer->state = DTLS_STATE_CLIENTHELLO;
 
   return res;
@@ -3856,12 +3937,12 @@ dtls_retransmit(dtls_context_t *context, netq_t *node) {
       netq_insert_node(context->sendqueue, node);
       
       if (node->type == DTLS_CT_HANDSHAKE) {
-	dtls_handshake_header_t *hs_header = DTLS_HANDSHAKE_HEADER(data);
+       dtls_handshake_header_t *hs_header = DTLS_HANDSHAKE_HEADER(data);
 
-	dtls_debug("** retransmit handshake package of type: %s (%i)\n",
-	           dtls_handshake_type_to_name(hs_header->msg_type), hs_header->msg_type);
+       dtls_debug("** retransmit handshake package of type: %s (%i)\n",
+                  dtls_handshake_type_to_name(hs_header->msg_type), hs_header->msg_type);
       } else {
-	dtls_debug("** retransmit packet\n");
+       dtls_debug("** retransmit packet\n");
       }
       
       err = dtls_prepare_record(node->peer, security, node->type, &data, &length,
@@ -3870,9 +3951,11 @@ dtls_retransmit(dtls_context_t *context, netq_t *node) {
 	dtls_warn("can not retransmit package, err: %i\n", err);
 	return;
       }
+#ifndef NO_DEBUG_DUMP
       dtls_debug_hexdump("retransmit header", sendbuf,
 			 sizeof(dtls_record_header_t));
       dtls_debug_hexdump("retransmit unencrypted", node->data, node->length);
+#endif
 
       (void)CALL(context, write, &node->peer->session, sendbuf, len);
       return;

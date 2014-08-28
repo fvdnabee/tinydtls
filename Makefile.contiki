@@ -8,7 +8,14 @@ CFLAGS += -DPROJECT_CONF_H=\"project-conf.h\"
 
 WITH_UIP6=1
 UIP_CONF_IPV6=1
-UIP_CONF_RPL=0
+UIP_CONF_IPV6_RPL=1
+
+# IPv6 make config disappeared completely
+CFLAGS += -DUIP_CONF_IPV6=1
+
+# RM090: enable printf
+ENABLE_PRINTF=1
+CFLAGS+=-DENABLE_PRINTF
 
 ifneq ($(ROLE),client)
 	CFLAGS+= -DHARD_CODED_ADDRESS=\"aaaa::02:232\"
@@ -18,6 +25,7 @@ else
 		 -DHARD_CODED_ADDRESS=\"aaaa::02:230\"
 endif
 
+# ERBIUM:
 WITH_ERBIUM=1
 
 ifeq ($(WITH_ERBIUM), 1)
