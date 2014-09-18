@@ -3655,8 +3655,11 @@ dtls_handle_message(dtls_context_t *ctx,
   peer = dtls_get_peer(ctx, session);
 
   if (!peer) {
-    dtls_debug("dtls_handle_message: PEER NOT FOUND\n");
-    dtls_dsrv_log_addr(DTLS_LOG_DEBUG, "peer addr", session);
+    dtls_debug("dtls_handle_message: PEER NOT FOUND ");
+#ifndef NDEBUG
+    uip_debug_ipaddr_print(&session->addr);
+    PRINTF(" %d\n", uip_ntohs(session->port));
+#endif
   } else {
     dtls_debug("dtls_handle_message: FOUND PEER\n");
   }
@@ -3670,17 +3673,28 @@ dtls_handle_message(dtls_context_t *ctx,
     dtls_peer_type role;
     dtls_state_t state;
 
-   //dtls_debug("rlen=%d, msglen=%d\\n", rlen, msglen); // fvdabeele
-   //dtls_debug("got packet %d (%d bytes)\n", msg[0], rlen); // fvdabeele
+   dtls_debug("got packet %d (%d bytes)\n", msg[0], rlen);
     if (peer) {
       data_length = decrypt_verify(peer, msg, rlen, &data);
       /* fvdabeele: sometimes decrypt_verify fails */
       if (data_length < 0) {
-        dtls_warn("decrypt_verify() failed, but we are continuing anyway.\n"); // fvdabeele
-        goto next; // fvdabeele
-      } //else {
-				//dtls_info("decrypt_verify() OK\n");
-			//}
+//
+//        dtls_warn("decrypt_verify() failed, but we are continuing anyway.\n"); // fvdabeele
+//        goto next; // fvdabeele
+//      } //else {
+//				//dtls_info("decrypt_verify() OK\n");
+//			//}
+//			Copied from tinydtls master brange:
+        int err = dtls_alert_fatal_create(DTLS_ALERT_DECRYPT_ERROR);
+        dtls_info("decrypt_verify() failed\n");
+        if (peer->state < DTLS_STATE_CONNECTED) {
+          dtls_alert_send_from_err(ctx, peer, &peer->session, err);
+          peer->state = DTLS_STATE_CLOSED;
+          /* dtls_stop_retransmission(ctx, peer); */
+          dtls_destory_peer(ctx, peer, 1);
+        }
+        return err;
+      }
       role = peer->role;
       state = peer->state;
     } else {

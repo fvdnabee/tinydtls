@@ -64,8 +64,9 @@ typedef struct {
 #define _dtls_address_equals_impl(A,B)				\
   ((A)->size == (B)->size					\
    && (A)->port == (B)->port					\
-   && uip_ipaddr_cmp(&((A)->addr),&((B)->addr))			\
-   && (A)->ifindex == (B)->ifindex)
+   && uip_ipaddr_cmp(&((A)->addr),&((B)->addr)))
+//   && (A)->ifindex == (B)->ifindex)
+
 
 // fvdabeele: Note these two inline functions were copied from a previous version of
 // tinydtls

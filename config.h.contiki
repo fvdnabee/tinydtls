@@ -74,7 +74,7 @@ typedef int ssize_t;
 
 typedef int ssize_t;
 #undef HAVE_ASSERT_H
-//#define assert(x)
+#define assert(x)
 #endif /* CONTIKI_TARGET_RM090 */
 
 #ifndef BYTE_ORDER

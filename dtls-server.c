@@ -71,9 +71,10 @@ extern void coap_receive_from_tinydtls(uip_ip6addr_t* srcipaddr, uint16_t srcpor
 #endif
 
 // Resources
-#define REST_RES_EVENT 1
-#define REST_RES_HELLO 1
-
+#define REST_RES_SENSOR 1
+#define REST_RES_ACTUATOR 1
+#define REST_RES_STATS 1
+//#define REST_RES_STATS_ASCII 1
 
 /*---------------------------------------------------------------------------*/
 /* Packet sniffer */
@@ -122,11 +123,14 @@ static int
 read_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  PRINTF("\nread_from_peer(): Start of application data\n"); // fvdabeele
-  for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
-  PRINTF("\nEnd of application data\n"); // fvdabeele
-	
+
+#ifndef NDEBUG
+//  PRINTF("\nread_from_peer(): Start of application data\n"); // fvdabeele
+//  for (i = 0; i < len; i++)
+//    PRINTF("%c", data[i]);
+//  PRINTF("\nEnd of application data\n"); // fvdabeele
+#endif
+
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
   return 0;
@@ -140,12 +144,15 @@ static int
 read_coap_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
   size_t i;
-  PRINTF("\nread_coap_from_peer(): Start of received application data (CoAP)"); // fvdabeele
-  printf(" %d bytes:\n", len);
-  for (i = 0; i < len; i++)
-    PRINTF("%02x ", data[i]);
-  PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
-	
+
+#ifndef NDEBUG
+//  PRINTF("\nread_coap_from_peer(): Start of received application data (CoAP)"); // fvdabeele
+//  printf(" %d bytes:\n", len);
+//  for (i = 0; i < len; i++)
+//    PRINTF("%02x ", data[i]);
+//  PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
+#endif
+
   /* store ctx and session for use in write_coap_to_latest_peer */
   latest_peer_ctx = ctx;
   latest_peer_session = session;
@@ -159,11 +166,14 @@ read_coap_from_peer(struct dtls_context_t *ctx,
 extern int
 write_coap_to_latest_peer(uint8_t *data, size_t len) {
   size_t i;
-  PRINTF("\nwrite_coap_to_latest_peer(): start of application data to send (CoAP)"); // fvdabeele
-  printf(" %d bytes:\n", len);
-  for (i = 0; i < len; i++)
-    PRINTF("%02x ", data[i]);
-  PRINTF("\nEnd of of application data to send (CoAP)\n"); // fvdabeele
+
+#ifndef NDEBUG
+//  PRINTF("\nwrite_coap_to_latest_peer(): start of application data to send (CoAP)"); // fvdabeele
+//  printf(" %d bytes:\n", len);
+//  for (i = 0; i < len; i++)
+//    PRINTF("%02x ", data[i]);
+//  PRINTF("\nEnd of of application data to send (CoAP)\n"); // fvdabeele
+#endif
 
   /* send CoAP message as outgoing application data */
   dtls_write(latest_peer_ctx, latest_peer_session, data, len);
@@ -249,15 +259,18 @@ dtls_handle_read(dtls_context_t *ctx) {
   if(uip_newdata()) {
     //uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
     //PRINTF("\n");
-    uip_ipaddr_t temp;
-    uip_ipaddr_copy(&temp,&UIP_IP_BUF->srcipaddr);
+    //uip_ipaddr_t temp;
+    //uip_ipaddr_copy(&temp,&UIP_IP_BUF->srcipaddr);
     //uip_debug_ipaddr_print(&temp);
     //PRINTF("\n");
+
+//    uip_debug_ipaddr_print(&UIP_IP_BUF->srcipaddr);
+//    PRINTF(" %d\n", uip_ntohs(UIP_UDP_BUF->srcport));
 
     uip_ipaddr_copy(&session.addr, &UIP_IP_BUF->srcipaddr);
     session.port = UIP_UDP_BUF->srcport;
     session.size = sizeof(session.addr) + sizeof(session.port);
-    
+
     uint8 r = dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
     //PRINTF("dtls_handle_message returned %d\n", r);
   }
@@ -345,7 +358,7 @@ init_dtls() {
   server_conn = udp_new(NULL, 0, NULL);
   udp_bind(server_conn, UIP_HTONS(5684));
 
-  dtls_set_log_level(DTLS_LOG_DEBUG);
+  dtls_set_log_level(DTLS_LOG_WARN);
 
   dtls_context = dtls_new_context(server_conn);
   if (dtls_context)
@@ -354,11 +367,12 @@ init_dtls() {
 
 /******************************************************************************/
 #ifdef TINYDTLS_ERBIUM
+#ifdef REST_RES_SENSOR
 /*
  * Resources are defined by the RESOURCE macro.
  * Signature: resource name, the RESTful methods it handles, and its URI path (omitting the leading slash).
  */
-RESOURCE(helloworld, METHOD_GET, "hello", "title=\"Hello world: ?len=0..\";rt=\"Text\"");
+RESOURCE(sensor, METHOD_GET, "sen", "rt=\"sen\"");
 
 /*
  * A handler function named [resource name]_handler must be implemented for each RESOURCE.
@@ -367,87 +381,115 @@ RESOURCE(helloworld, METHOD_GET, "hello", "title=\"Hello world: ?len=0..\";rt=\"
  * If a smaller block size is requested for CoAP, the REST framework automatically splits the data.
  */
 void
-helloworld_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+sensor_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
   const char *len = NULL;
   /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
-  char const * const message = "Hello World! ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy";
-  int length = 12; /*           |<-------->| */
+  char const * const message = "25.0C ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy";
+  int length = 5; /*           |<-->| */
 
-  /* The query string can be retrieved by rest_get_query() or parsed for its key-value pairs. */
-  if (REST.get_query_variable(request, "len", &len)) {
-    length = atoi(len);
-    if (length<0) length = 0;
-    if (length>REST_MAX_CHUNK_SIZE) length = REST_MAX_CHUNK_SIZE;
-    memcpy(buffer, message, length);
-  } else {
-    memcpy(buffer, message, length);
-  }
+  memcpy(buffer, message, length);
 
-  REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
+  //REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
   REST.set_header_etag(response, (uint8_t *) &length, 1);
   REST.set_response_payload(response, buffer, length);
 }
 #endif
-/*---------------------------------------------------------------------------*/
-#if REST_RES_EVENT && defined TINYDTLS_ERBIUM && defined (PLATFORM_HAS_BUTTON)
+
+#ifdef REST_RES_ACTUATOR
+RESOURCE(actuator, METHOD_POST, "act", "rt=\"act\"");
+
 /*
- * Example for an event resource.
- * Additionally takes a period parameter that defines the interval to call [name]_periodic_handler().
- * A default post_handler takes care of subscriptions and manages a list of subscribers to notify.
+ * A handler function named [resource name]_handler must be implemented for each RESOURCE.
+ * A buffer for the response payload is provided through the buffer pointer. Simple resources can ignore
+ * preferred_size and offset, but must respect the REST_MAX_CHUNK_SIZE limit for the buffer.
+ * If a smaller block size is requested for CoAP, the REST framework automatically splits the data.
  */
-EVENT_RESOURCE(event, METHOD_GET, "sensors/button", "title=\"Event demo\";obs");
-
 void
-event_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+actuator_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
-  /* Usually, a CoAP server would response with the current resource representation. */
-  const char *msg = "It's eventful!";
-  REST.set_response_payload(response, (uint8_t *)msg, strlen(msg));
+  const char *len = NULL;
+  /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
+  char const * const message = "ON ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy";
+  int length = 2; /*           |-| */
 
-  /* A post_handler that handles subscriptions/observing will be called for periodic resources by the framework. */
+  memcpy(buffer, message, length);
+
+  //REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
+  REST.set_header_etag(response, (uint8_t *) &length, 1);
+  REST.set_response_payload(response, buffer, length);
+}
+#endif
+
+void get_stats(uint32_t* buf) {
+  buf[0] = clock_time();
+  buf[1] = energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time;
+  buf[2] = energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time;
+  buf[3] = energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time;
+  buf[4] = energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time;
+  buf[5] = energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time;
+  buf[6] = packets_transmitted;
+  buf[7] = packets_received;
+  buf[8] = cc2520_sfd_tx_counter;
+  buf[9] = cc2520_sfd_rx_time;
+  buf[10] = cc2520_sfd_rx_counter;
+  buf[11] = cc2520_sfd_rx_time;
 }
 
-/* Additionally, a handler function named [resource name]_event_handler must be implemented for each PERIODIC_RESOURCE defined.
- * It will be called by the REST manager process with the defined period. */
+#ifdef REST_RES_STATS
+/* Reporting stats */
+RESOURCE(stats, METHOD_GET, "s", "");
+
 void
-event_event_handler(resource_t *r)
+stats_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  static uint16_t event_counter = 0;
-  static char content[12];
+  // For writing 32-bit values, address should be even
+  uint32_t *buffer_ = (uint32_t *)buffer;
+  if((uint16_t)buffer % 2 == 1) {
+    buffer_ = (uint32_t *)(buffer + 1);
+  }
 
-  ++event_counter;
-  PRINTF("TICK %u for /%s\n", event_counter, r->url);
+  get_stats(buffer_);
+  //buffer_[0] = clock_time();
+  //buffer_[1] = energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time;
+  //buffer_[2] = energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time;
+  //buffer_[3] = energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time;
+  //buffer_[4] = energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time;
+  //buffer_[5] = energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time;
+  //buffer_[6] = packets_transmitted;
+  //buffer_[7] = packets_received;
+  //buffer_[8] = cc2520_sfd_tx_counter;
+  //buffer_[9] = cc2520_sfd_rx_time;
+  //buffer_[10] = cc2520_sfd_rx_counter;
+  //buffer_[11] = cc2520_sfd_rx_time;
 
-	if (event_counter == 1) {
-		printf("******** Start energy measurements \n");
-
-		rx_start_time = energest_type_time(ENERGEST_TYPE_LISTEN); 
-  	lpm_start_time = energest_type_time(ENERGEST_TYPE_LPM);
-  	cpu_start_time = energest_type_time(ENERGEST_TYPE_CPU);
-  	tx_start_time = energest_type_time(ENERGEST_TYPE_TRANSMIT);
-		irq_start_time = energest_type_time(ENERGEST_TYPE_IRQ);
-	} else {
-		printf("******** ENERGY listen %li tx %li cpu %li lpm %li irq %li \n",
-		  	energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time,
-		  	energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time,
-		  	energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time,
-		  	energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time,
-				energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
-		  ); 
-	}
-
-  /* Build notification. */
-  coap_packet_t notification[1]; /* This way the packet can be treated as pointer as usual. */
-  coap_init_message(notification, COAP_TYPE_CON, REST.status.OK, 0 );
-  coap_set_payload(notification, content, snprintf(content, sizeof(content), "EVENT %u", event_counter));
-
-  /* Notify the registered observers with the given message type, observe option, and payload. */
-  REST.notify_subscribers(r, event_counter, notification);
+  REST.set_response_payload(response, buffer_, 12*4);
 }
-#endif /* PLATFORM_HAS_BUTTON */
+#endif
 
+#ifdef REST_RES_STATS_ASCII
+/* Reporting stats */
+RESOURCE(stats_ascii, METHOD_GET, "s2", "");
+
+void
+stats_ascii_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  REST.set_response_payload(response, buffer, snprintf((char *)buffer, REST_MAX_CHUNK_SIZE, "%lu %lu %lu %lu %lu %lu %lu %lu %u %u %u %u", 
+        clock_time(), 
+        energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time, 
+        energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time, 
+        energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time, 
+        energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time, 
+        energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time,   
+        packets_transmitted, 
+        packets_received, 
+        cc2520_sfd_tx_counter, 
+        cc2520_sfd_tx_time,
+        cc2520_sfd_rx_counter, 
+        cc2520_sfd_rx_time));
+}
+#endif
+#endif
 /*---------------------------------------------------------------------------*/
 
 /* P2.0 of the rm090 is hooked up to cc2520 gpio p4, i.e. SFD:
@@ -550,15 +592,15 @@ void print_stats(int i) {
 //												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time 
 //												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time);
 
-  printf("Energest: %li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
-												, energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time
-												, energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
-												, energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time
-												, energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time
-												, packets_transmitted, packets_received
-												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time
-												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time); 
-
+//  printf("Energest: %li;%li;%li;%li;%li;%li;%u;%u;%u;%u;\n"
+//												, energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time
+//												, energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time
+//												, energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time
+//												, energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time
+//												, packets_transmitted, packets_received
+//												, cc2520_sfd_tx_counter, cc2520_sfd_tx_time
+//												, cc2520_sfd_rx_counter, cc2520_sfd_rx_time); 
+//
 }
 
 /******************************************************************************/
@@ -609,16 +651,18 @@ PROCESS_THREAD(udp_server_process, ev, data)
 
 #if defined TINYDTLS_ERBIUM
   /* Activate the application-specific resources. */
-#if REST_RES_HELLO
-	rest_activate_resource(&resource_helloworld);
+#if REST_RES_SENSOR
+	rest_activate_resource(&resource_sensor);
 #endif
-#if defined (PLATFORM_HAS_BUTTON) && REST_RES_EVENT
-  rest_activate_event_resource(&resource_event);
+#if REST_RES_ACTUATOR
+	rest_activate_resource(&resource_actuator);
 #endif
-#if defined (PLATFORM_HAS_BUTTON) && (REST_RES_EVENT || (REST_RES_SEPARATE && WITH_COAP > 3))
-  SENSORS_ACTIVATE(button_sensor);
+#ifdef REST_RES_STATS
+	rest_activate_resource(&resource_stats);
 #endif
-
+#ifdef REST_RES_STATS_ASCII 
+	rest_activate_resource(&resource_stats_ascii);
+#endif
 #endif
 
   /* initialize serial line */
@@ -640,7 +684,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
     PROCESS_YIELD(); //PROCESS_WAIT_EVENT(); --> werkt niet samen met hardware interupt!
 
     if(ev == tcpip_event) {
-      PRINTF("dtls-server: tcpip_event, calling dtls_handle_read\n");
+      //PRINTF("dtls-server: tcpip_event, calling dtls_handle_read\n");
       dtls_handle_read(dtls_context);
 			//print_stats();
     }
@@ -648,21 +692,36 @@ PROCESS_THREAD(udp_server_process, ev, data)
 		#if defined (PLATFORM_HAS_BUTTON) && defined TINYDTLS_ERBIUM
     else if (ev == sensors_event && data == &button_sensor) {
       PRINTF("BUTTON\n");
-			#if REST_RES_EVENT
-      /* Call the event_handler for this application-specific event. */
-      event_event_handler(&resource_event);
-			#endif
 		}
 		#endif
 
     else if(ev == serial_line_event_message) {
       char *line = (char *)data;
       if (line[0] == '?' && line[1] == 'E') { // request to print energest values:
-				event_counter += 1;
-				if (event_counter == 1) { // init
-
-				}
-				print_stats(15);
+        printf("%lu %lu %lu %lu %lu %lu %lu %lu %u %u %u %u\n", 
+        clock_time(), 
+        energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time, 
+        energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time, 
+        energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time, 
+        energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time, 
+        energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time,   
+        packets_transmitted, 
+        packets_received, 
+        cc2520_sfd_tx_counter, 
+        cc2520_sfd_tx_time,
+        cc2520_sfd_rx_counter, 
+        cc2520_sfd_rx_time);
+//        // For writing 32-bit values, address should be even
+//        uint32_t *buffer_ = (uint32_t *)buffer;
+//        if((uint16_t)buffer % 2 == 1) {
+//          buffer_ = (uint32_t *)(buffer + 1);
+//        }
+//        get_stats(buffer_);
+//
+//        buffer_[12] = 0x00000000; // NULL character to terminate string
+//
+//        for (int i = 0; i < 
+//        printf("%s\n", (char*)buffer_);
     	}
 		}
 
@@ -671,26 +730,9 @@ PROCESS_THREAD(udp_server_process, ev, data)
       /* dtls_handle_message(dtls_context, &the_session, readbuf, bytes_read); */
       read_from_peer(dtls_context, &the_session, readbuf, bytes_read);
     }
-    dtls_handle_message(ctx, &session, uip_appdata, bytes_read);
+    //dtls_handle_message(ctx, &session, uip_appdata, bytes_read);
 #endif
 
-
-
-//#ifdef TINYDTLS_ERBIUM
-//#if defined (PLATFORM_HAS_BUTTON)
-//    if (ev == sensors_event && data == &button_sensor) {
-//      PRINTF("BUTTON\n");
-//#if REST_RES_EVENT
-//      /* Call the event_handler for this application-specific event. */
-//      event_event_handler(&resource_event);
-//#endif
-//#if REST_RES_SEPARATE && WITH_COAP>3
-//      /* Also call the separate response example handler. */
-//      separate_finalize_handler();
-//#endif
-//    }
-//#endif /* PLATFORM_HAS_BUTTON */
-//#endif
   }
   PROCESS_END();
 }

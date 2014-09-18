@@ -249,7 +249,7 @@ dtls_ccm_decrypt_message(rijndael_ctx *ctx, size_t M, size_t L,
   unsigned char S[DTLS_CCM_BLOCKSIZE]; /* S_i = encrypted A_i blocks */
   unsigned char X[DTLS_CCM_BLOCKSIZE]; /* X_i = encrypted B_i blocks */
 
-  dtls_debug("dtls_ccm_decrypt_message(): lm = %d, M = %d\n", lm, M);
+  //dtls_debug("dtls_ccm_decrypt_message(): lm = %d, M = %d\n", lm, M);
   if (lm < M)
     goto error;
 
@@ -259,7 +259,7 @@ dtls_ccm_decrypt_message(rijndael_ctx *ctx, size_t M, size_t L,
   /* create the initial authentication block B0 */
   block0(M, L, la, lm, nonce, B);
   add_auth_data(ctx, aad, la, B, X);
-  dtls_debug("dtls_ccm_decrypt_message(): created initial auth block\n");
+  //dtls_debug("dtls_ccm_decrypt_message(): created initial auth block\n");
 
   /* initialize block template */
   A[0] = L-1;
@@ -268,7 +268,7 @@ dtls_ccm_decrypt_message(rijndael_ctx *ctx, size_t M, size_t L,
   memcpy(A + 1, nonce, DTLS_CCM_BLOCKSIZE - L);
   
   while (lm >= DTLS_CCM_BLOCKSIZE) {
-    dtls_debug("dtls_ccm_decrypt_message():  decrypting in while\n");
+    //dtls_debug("dtls_ccm_decrypt_message():  decrypting in while\n");
     /* decrypt */
     encrypt(ctx, L, counter, msg, DTLS_CCM_BLOCKSIZE, A, S);
     
@@ -282,7 +282,7 @@ dtls_ccm_decrypt_message(rijndael_ctx *ctx, size_t M, size_t L,
   }
 
   if (lm) {
-    dtls_debug("dtls_ccm_decrypt_message():  additional decyrpt\n");
+    //dtls_debug("dtls_ccm_decrypt_message():  additional decyrpt\n");
     /* decrypt */
     encrypt(ctx, L, counter, msg, lm, A, S);
 
@@ -303,12 +303,12 @@ dtls_ccm_decrypt_message(rijndael_ctx *ctx, size_t M, size_t L,
   rijndael_encrypt(ctx, A, S);
 
   memxor(msg, S, M);
-  dtls_debug("dtls_ccm_decrypt_message(): msg = %s\n", msg);
-  dtls_debug("dtls_ccm_decrypt_message(): X = %s\n", X);
+  //dtls_debug("dtls_ccm_decrypt_message(): msg = %s\n", msg);
+  //dtls_debug("dtls_ccm_decrypt_message(): X = %s\n", X);
 
   /* return length if MAC is valid, otherwise continue with error handling */
   if (equals(X, msg, M)) {
-    dtls_debug("dtls_ccm_decrypt_message():  MAC is valid\n");
+    //dtls_debug("dtls_ccm_decrypt_message():  MAC is valid\n");
     return len - M;
   }
   
