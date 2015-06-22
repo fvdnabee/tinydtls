@@ -47,6 +47,12 @@
 #include "debug.h"
 #include "dtls.h"
 
+#ifdef TINYDTLS_ERBIUM
+#include "rest-engine.h"
+// Instead of including the entire er-coap-engine file, we just declare the one function we need as an external function
+extern void coap_receive_from_tinydtls(uip_ip6addr_t* srcipaddr, uint16_t srcport, uint8_t* data, uint16_t datalen);
+#endif
+
 #ifdef ENABLE_POWERTRACE
 #include "powertrace.h"
 #endif
@@ -89,6 +95,44 @@ read_from_peer(struct dtls_context_t *ctx,
   dtls_write(ctx, session, data, len);
   return 0;
 }
+
+#ifdef TINYDTLS_ERBIUM
+static dtls_context_t* latest_peer_ctx;
+static session_t* latest_peer_session;
+
+static int
+read_coap_from_peer(struct dtls_context_t *ctx, 
+              session_t *session, uint8 *data, size_t len) {
+  size_t i;
+  PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
+  for (i = 0; i < len; i++)
+    PRINTF("%c", data[i]);
+  PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
+
+  /* store ctx and session for use in write_coap_to_latest_peer */
+  latest_peer_ctx = ctx;
+  latest_peer_session = session;
+
+  /* pass result to erbium */
+  coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest peer
+
+  return 0;
+}
+
+extern int
+write_coap_to_latest_peer(uint8_t *data, size_t len) {
+  /* send CoAP message as outgoing application data */
+  dtls_write(latest_peer_ctx, latest_peer_session, data, len);
+
+  size_t i;
+  PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
+  for (i = 0; i < len; i++)
+    PRINTF("%c", data[i]);
+  PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
+
+  return 0;
+}
+#endif
 
 static int
 send_to_peer(struct dtls_context_t *ctx, 
@@ -137,7 +181,18 @@ get_psk_info(struct dtls_context_t *ctx, const session_t *session,
   };
 
   if (type != DTLS_PSK_KEY) {
-    return 0;
+    if (type == DTLS_PSK_HINT) {
+      // return "Client_identity" PSK hint
+      if (result_length < psk[0].id_length) {
+        dtls_warn("buffer too small for PSK identity");
+        return dtls_alert_fatal_create(DTLS_ALERT_INTERNAL_ERROR);
+      }
+
+      memcpy(result, psk[0].id, psk[0].id_length);
+      return psk[0].id_length;
+    } else {
+      return 0;
+    }
   }
 
   if (id) {
@@ -244,7 +299,11 @@ void
 init_dtls() {
   static dtls_handler_t cb = {
     .write = send_to_peer,
+#ifndef TINYDTLS_ERBIUM
     .read  = read_from_peer,
+#else
+    .read  = read_coap_from_peer,
+#endif
     .event = NULL,
 #ifdef DTLS_PSK
     .get_psk_info = get_psk_info,
@@ -285,7 +344,7 @@ init_dtls() {
 #endif /* UIP_CONF_ROUTER */
 
   server_conn = udp_new(NULL, 0, NULL);
-  udp_bind(server_conn, UIP_HTONS(20220));
+  udp_bind(server_conn, UIP_HTONS(5684));
 
   dtls_set_log_level(DTLS_LOG_DEBUG);
 
@@ -293,6 +352,52 @@ init_dtls() {
   if (dtls_context)
     dtls_set_handler(dtls_context, &cb);
 }
+
+#ifdef TINYDTLS_ERBIUM
+#include <stdlib.h>
+#include <string.h>
+#include "rest-engine.h"
+
+static void res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+
+/*
+ * A handler function named [resource name]_handler must be implemented for each RESOURCE.
+ * A buffer for the response payload is provided through the buffer pointer. Simple resources can ignore
+ * preferred_size and offset, but must respect the REST_MAX_CHUNK_SIZE limit for the buffer.
+ * If a smaller block size is requested for CoAP, the REST framework automatically splits the data.
+ */
+RESOURCE(res_hello,
+         "title=\"Hello world: ?len=0..\";rt=\"Text\"",
+         res_get_handler,
+         NULL,
+         NULL,
+         NULL);
+
+static void
+res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  const char *len = NULL;
+  /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
+  char const *const message = "Hello World! ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy";
+  int length = 12; /*           |<-------->| */
+
+  /* The query string can be retrieved by rest_get_query() or parsed for its key-value pairs. */
+  if(REST.get_query_variable(request, "len", &len)) {
+    length = atoi(len);
+    if(length < 0) {
+      length = 0;
+    }
+    if(length > REST_MAX_CHUNK_SIZE) {
+      length = REST_MAX_CHUNK_SIZE;
+    }
+    memcpy(buffer, message, length);
+  } else {
+    memcpy(buffer, message, length);
+  } REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
+  REST.set_header_etag(response, (uint8_t *)&length, 1);
+  REST.set_response_payload(response, buffer, length);
+}
+#endif
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
@@ -308,6 +413,14 @@ PROCESS_THREAD(udp_server_process, ev, data)
     dtls_emerg("cannot create context\n");
     PROCESS_EXIT();
   }
+
+#ifdef TINYDTLS_ERBIUM
+  /* Initialize the REST engine. */
+  rest_init_engine();
+
+  /* Activate the application-specific resources. */
+  rest_activate_resource(&res_hello, "test/hello");
+#endif
 
 #ifdef ENABLE_POWERTRACE
   powertrace_start(CLOCK_SECOND * 2); 

@@ -3286,7 +3286,46 @@ handle_handshake_msg(dtls_context_t *ctx, dtls_peer_t *peer, session_t *session,
     }
 
     /* update finish MAC */
-    update_hs_hash(peer, data, data_length);
+    //update_hs_hash(peer, data, data_length);
+    // fvdabeele: calling update_hash_hash with data_length > 63 gives mspsim Illegal
+    // read error like:
+    // MSP430: **** Illegal read - misaligned word from $03e4f at $0bdd6
+    // Stack Trace: number of calls: 21 PC: $0bdd6
+    //  SHA256_Transform (../../apps/tinydtls/sha2/sha2.c) called from PC: $0c48c (elapsed: 8619)
+    //  SHA256_Update (../../apps/tinydtls/sha2/sha2.c) called from PC: $086a2 (elapsed: 8696)
+    //  update_hs_hash (local in .//dtls.c) called from PC: $09e92 (elapsed: 383880)
+    //  handle_handshake_msg (local in .//dtls.c) called from PC: $0a78a (elapsed: 2269241)
+    //  dtls_handle_message (.//dtls.c) called from PC: $066b0 (elapsed: 3619764)
+    //  process_thread_udp_server_process (local in .//dtls-server.c) called from PC: $11b56 (elapsed: 3731214)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11d64 (elapsed: 3731249)
+    //  process_post_synch (../../core/sys/process.c) called from PC: $12770 (elapsed: 3731261)
+    //  tcpip_uipcall (../../core/net/ip/tcpip.c) called from PC: $13d94 (elapsed: 3731288)
+    //  uip_process (../../core/net/ipv6/uip6.c) called from PC: $1270e (elapsed: 3733754)
+    //  process_thread_tcpip_process (local in ../../core/net/ip/tcpip.c) called from PC: $11b56 (elapsed: 3733788)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11d64 (elapsed: 3733823)
+    //  process_post_synch (../../core/sys/process.c) called from PC: $12520 (elapsed: 3733835)
+    //  tcpip_input (../../core/net/ip/tcpip.c) called from PC: $12f68 (elapsed: 3733844)
+    //  input (local in ../../core/net/ipv6/sicslowpan.c) called from PC: $1566e (elapsed: 3735501)
+    //  packet_input (local in ../../core/net/mac/nullmac.c) called from PC: $156ee (elapsed: 3735508)
+    //  packet_input (local in ../../core/net/mac/nullrdc.c) called from PC: $10ee6 (elapsed: 3870695)
+    //  process_thread_cc2520_process (local in ../../dev/cc2520/cc2520.c) called from PC: $11b56 (elapsed: 3876956)
+    //  call_process (local in ../../core/sys/process.c) called from PC: $11c24 (elapsed: 3876991)
+    //  do_poll (local in ../../core/sys/process.c) called from PC: $11c66 (elapsed: 3877096)
+    //  process_run (../../core/sys/process.c) called from PC: $05d38 (elapsed: 3877111)
+    // WARN [Thread-33] (MspMote.java:226) - 2: # MSP430[MISALIGNED_READ]: **** Illegal read - misaligned word from $03e4f at $0bdd6
+
+    // Work-around: provide blocks of 63 bytes to update_hs_hash
+#define TINYDTLS_SHA256_PIECE_SIZE 63
+    if (data_length > TINYDTLS_SHA256_PIECE_SIZE) {
+      dtls_debug_dump("hashing in pieces of PIECE_SIZE", data, data_length);
+      int i;
+      for (i = 0; i < data_length/TINYDTLS_SHA256_PIECE_SIZE; i++)
+        update_hs_hash(peer, data+i*TINYDTLS_SHA256_PIECE_SIZE, TINYDTLS_SHA256_PIECE_SIZE);
+      update_hs_hash(peer, data+i*TINYDTLS_SHA256_PIECE_SIZE, data_length - i*TINYDTLS_SHA256_PIECE_SIZE);
+    } else {
+      update_hs_hash(peer, data, data_length);
+    }
+
 
     err = dtls_send_server_hello_msgs(ctx, peer);
     if (err < 0) {

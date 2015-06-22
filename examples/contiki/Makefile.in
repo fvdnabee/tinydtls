@@ -54,6 +54,16 @@ APPS += tinydtls/aes tinydtls/sha2 tinydtls/ecc tinydtls
 
 ccm-test: tests/ccm-test
 
+WITH_ERBIUM=1
+
+ifeq ($(WITH_ERBIUM), 1)
+# REST Engine shall use Erbium CoAP implementation
+APPS += er-coap
+APPS += rest-engine
+
+CFLAGS += -DTINYDTLS_ERBIUM
+endif
+
 dist:	$(FILES)
 	test -d $(DISTDIR)/examples/contiki || $(MKDIR) -p $(DISTDIR)/examples/contiki
 	cp $(FILES) $(DISTDIR)/examples/contiki

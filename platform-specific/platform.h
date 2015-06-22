@@ -49,6 +49,16 @@
 #  include "platform-specific/config-wismote.h"
 #endif /* CONTIKI_TARGET_WISMOTE */
 
+#ifdef CONTIKI_TARGET_RM090
+/* Need to set the byte order for RM090 explicitely */
+//#define BYTE_ORDER LITTLE_ENDIAN
+
+//typedef int ssize_t;
+#undef HAVE_ASSERT_H
+#define assert(x)
+//#define HAVE_VPRINTF
+#endif /* CONTIKI_TARGET_RM090 */
+
 #ifdef CONTIKI_TARGET_SKY
 #  include "platform-specific/config-sky.h"
 #endif /* CONTIKI_TARGET_SKY */
