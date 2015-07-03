@@ -97,9 +97,6 @@ read_from_peer(struct dtls_context_t *ctx,
 }
 
 #ifdef TINYDTLS_ERBIUM
-static dtls_context_t* latest_peer_ctx;
-static session_t* latest_peer_session;
-
 static int
 read_coap_from_peer(struct dtls_context_t *ctx, 
               session_t *session, uint8 *data, size_t len) {
@@ -109,10 +106,6 @@ read_coap_from_peer(struct dtls_context_t *ctx,
     PRINTF("%c", data[i]);
   PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
 
-  /* store ctx and session for use in write_coap_to_latest_peer */
-  latest_peer_ctx = ctx;
-  latest_peer_session = session;
-
   /* pass result to erbium */
   coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest peer
 
@@ -120,9 +113,9 @@ read_coap_from_peer(struct dtls_context_t *ctx,
 }
 
 extern int
-write_coap_to_latest_peer(uint8_t *data, size_t len) {
+write_coap_to_peer(session_t* session, uint8_t *data, size_t len) {
   /* send CoAP message as outgoing application data */
-  dtls_write(latest_peer_ctx, latest_peer_session, data, len);
+  dtls_write(dtls_context, session, data, len);
 
   size_t i;
   PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
@@ -131,6 +124,14 @@ write_coap_to_latest_peer(uint8_t *data, size_t len) {
   PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
 
   return 0;
+}
+
+extern int
+dtls_server_know_peer(session_t* session) {
+  // Try to find out whether we are connected to the peer via DTLS or plain-text CoAP
+  dtls_peer_t* peer = dtls_get_peer(dtls_context, session);
+
+  return peer != NULL;
 }
 #endif
 
@@ -358,7 +359,8 @@ init_dtls() {
 #include <string.h>
 #include "rest-engine.h"
 
-static void res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+// Hello world resource
+static void res_hello_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
 /*
  * A handler function named [resource name]_handler must be implemented for each RESOURCE.
@@ -368,13 +370,13 @@ static void res_get_handler(void *request, void *response, uint8_t *buffer, uint
  */
 RESOURCE(res_hello,
          "title=\"Hello world: ?len=0..\";rt=\"Text\"",
-         res_get_handler,
+         res_hello_get_handler,
          NULL,
          NULL,
          NULL);
 
 static void
-res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+res_hello_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
   const char *len = NULL;
   /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
@@ -396,6 +398,77 @@ res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferr
   } REST.set_header_content_type(response, REST.type.TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
   REST.set_header_etag(response, (uint8_t *)&length, 1);
   REST.set_response_payload(response, buffer, length);
+}
+
+
+// Observable resource
+static void res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+static void res_obs_periodic_handler(void);
+
+PERIODIC_RESOURCE(res_obs,
+                  "title=\"Periodic demo\";obs",
+                  res_obs_get_handler,
+                  NULL,
+                  NULL,
+                  NULL,
+                  5 * CLOCK_SECOND,
+                  res_obs_periodic_handler);
+
+/*
+ * Use local resource state that is accessed by res_get_handler() and altered by res_periodic_handler() or PUT or POST.
+ */
+static int32_t event_counter = 0;
+
+static void
+res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  /*
+   * For minimal complexity, request query and options should be ignored for GET on observable resources.
+   * Otherwise the requests must be stored with the observer list and passed by REST.notify_subscribers().
+   * This would be a TODO in the corresponding files in contiki/apps/erbium/!
+   */
+  REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
+  REST.set_header_max_age(response, res_obs.periodic->period / CLOCK_SECOND);
+  REST.set_response_payload(response, buffer, snprintf((char *)buffer, preferred_size, "VERY LONG EVENT %lu", event_counter));
+
+  /* The REST.subscription_handler() will be called for observable resources by the REST framework. */
+}
+/*
+ * Additionally, a handler function named [resource name]_handler must be implemented for each PERIODIC_RESOURCE.
+ * It will be called by the REST manager process with the defined period.
+ */
+
+static void
+res_obs_periodic_handler()
+{
+  /* Do a periodic task here, e.g., sampling a sensor. */
+  ++event_counter;
+
+  /* Usually a condition is defined under with subscribers are notified, e.g., large enough delta in sensor reading. */
+  if(1) {
+    /* Notify the registered observers which will trigger the res_get_handler to create the response. */
+    REST.notify_subscribers(&res_obs);
+  }
+}
+
+
+// Toggle resource
+#include "dev/leds.h"
+
+static void res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+
+/* A simple actuator example. Toggles the red led */
+RESOURCE(res_toggle,
+         "title=\"Red LED\";rt=\"Control\"",
+         NULL,
+         res_post_handler,
+         NULL,
+         NULL);
+
+static void
+res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  leds_toggle(LEDS_RED);
 }
 #endif
 
@@ -419,7 +492,12 @@ PROCESS_THREAD(udp_server_process, ev, data)
   rest_init_engine();
 
   /* Activate the application-specific resources. */
-  rest_activate_resource(&res_hello, "test/hello");
+  rest_activate_resource(&res_hello, "hello");
+  rest_activate_resource(&res_obs, "obs");
+#if PLATFORM_HAS_LEDS
+/*  rest_activate_resource(&res_leds, "actuators/leds"); */
+  rest_activate_resource(&res_toggle, "actuators/toggle");
+#endif
 #endif
 
 #ifdef ENABLE_POWERTRACE
