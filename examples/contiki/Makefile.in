@@ -10,6 +10,8 @@ UIP_CONF_IPV6_RPL=0
 CFLAGS += -DUIP_CONF_IPV6_RPL=0 -DRPL_BORDER_ROUTER=0
 endif
 
+CFLAGS += -DPROJECT_CONF_H=\"project-conf.h\"
+
 # usually, you should not need changing anything beyond this line
 ########################################################################
 
