@@ -42,6 +42,9 @@
 #ifndef DEBUG
 #define DEBUG DEBUG_PRINT
 #endif
+
+#define DEBUG_VERBOSE 0
+
 #include "net/ip/uip-debug.h"
 
 #include "debug.h"
@@ -87,9 +90,11 @@ static const unsigned char ecdsa_pub_key_y[] = {
 static int
 read_from_peer(struct dtls_context_t *ctx, 
 	       session_t *session, uint8 *data, size_t len) {
-  size_t i;
-  for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
+  if (DEBUG_VERBOSE) {
+    size_t i;
+    for (i = 0; i < len; i++)
+      PRINTF("%c", data[i]);
+  }
 
   /* echo incoming application data */
   dtls_write(ctx, session, data, len);
@@ -100,11 +105,13 @@ read_from_peer(struct dtls_context_t *ctx,
 static int
 read_coap_from_peer(struct dtls_context_t *ctx, 
               session_t *session, uint8 *data, size_t len) {
-  size_t i;
-  PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
-  for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
-  PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
+  if (DEBUG_VERBOSE) {
+    size_t i;
+    PRINTF("\nStart of received application data (CoAP)\n"); // fvdabeele
+    for (i = 0; i < len; i++)
+      PRINTF("%c", data[i]);
+    PRINTF("\nEnd of of received application data (CoAP)\n"); // fvdabeele
+  }
 
   /* pass result to erbium */
   coap_receive_from_tinydtls(&UIP_IP_BUF->srcipaddr, UIP_UDP_BUF->srcport, data, len); // Note this will call write_coap_to_latest peer
@@ -118,10 +125,12 @@ write_coap_to_peer(session_t* session, uint8_t *data, size_t len) {
   dtls_write(dtls_context, session, data, len);
 
   size_t i;
-  PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
-  for (i = 0; i < len; i++)
-    PRINTF("%c", data[i]);
-  PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
+  if (DEBUG_VERBOSE) {
+    PRINTF("\nStart of transmitted application data (CoAP)\n"); // fvdabeele
+    for (i = 0; i < len; i++)
+      PRINTF("%c", data[i]);
+    PRINTF("\nEnd of of transmitted application data (CoAP)\n"); // fvdabeele
+  }
 
   return 0;
 }
@@ -144,9 +153,11 @@ send_to_peer(struct dtls_context_t *ctx,
   uip_ipaddr_copy(&conn->ripaddr, &session->addr);
   conn->rport = session->port;
 
-  PRINTF("send to ");
-  PRINT6ADDR(&conn->ripaddr);
-  PRINTF(":%u\n", uip_ntohs(conn->rport));
+  if (DEBUG_VERBOSE) {
+    PRINTF("send to ");
+    PRINT6ADDR(&conn->ripaddr);
+    PRINTF(":%u\n", uip_ntohs(conn->rport));
+  }
 
   uip_udp_packet_send(conn, data, len);
 
@@ -347,7 +358,8 @@ init_dtls() {
   server_conn = udp_new(NULL, 0, NULL);
   udp_bind(server_conn, UIP_HTONS(5684));
 
-  dtls_set_log_level(DTLS_LOG_DEBUG);
+  //dtls_set_log_level(DTLS_LOG_DEBUG);
+  dtls_set_log_level(DTLS_LOG_CRIT);
 
   dtls_context = dtls_new_context(server_conn);
   if (dtls_context)

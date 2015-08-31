@@ -32,6 +32,8 @@
 #include "global.h"
 #include "session.h"
 
+static int maxlog;
+
 #ifdef WITH_CONTIKI
 # ifndef DEBUG
 #  define DEBUG DEBUG_PRINT
@@ -87,7 +89,11 @@ void dtls_set_log_level(log_t level);
 #ifdef HAVE_VPRINTF
 void dsrv_log(log_t level, char *format, ...);
 #else
+#ifdef CONTIKI_TARGET_RM090
+#define dsrv_log(level, format, ...) level < maxlog ? PRINTF(format, ##__VA_ARGS__) : 0
+#else
 #define dsrv_log(level, format, ...) PRINTF(format, ##__VA_ARGS__)
+#endif
 #endif
 
 /** dumps packets in usual hexdump format */
