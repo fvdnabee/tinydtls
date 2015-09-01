@@ -34,18 +34,17 @@
  *      Erbium (Er) example project configuration.
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
+ *      Floris Van den Abeele <fvdabeele@intec.ugent.be>
  */
 
-#ifndef __PROJECT_ERBIUM_CONF_H__
-#define __PROJECT_ERBIUM_CONF_H__
+#ifndef __PROJECT_ERBIUM_DTLS_CONF_H__
+#define __PROJECT_ERBIUM_DTLS_CONF_H__
 
 /* Custom channel and PAN ID configuration for your project. */
 /*
    #undef RF_CHANNEL
    #define RF_CHANNEL                     26
 
-   #undef IEEE802154_CONF_PANID
-   #define IEEE802154_CONF_PANID          0xABCD
  */
 
 #undef IEEE802154_CONF_PANID
@@ -56,24 +55,19 @@
 #undef UIP_CONF_BUFFER_SIZE
 #define UIP_CONF_BUFFER_SIZE           256
 
+#undef NETSTACK_CONF_MAC
+#define NETSTACK_CONF_MAC     csma_driver
+/* #define NETSTACK_CONF_MAC     nullmac_driver */
 
 /* Disabling RDC and CSMA for demo purposes. Core updates often
    require more memory. */
 /* For projects, optimize memory and enable RDC and CSMA again. */
 #undef NETSTACK_CONF_RDC
-//#define NETSTACK_CONF_RDC              nullrdc_driver
 #define NETSTACK_CONF_RDC   contikimac_driver
+/* #define NETSTACK_CONF_RDC              nullrdc_driver */
 
 #undef NETSTACK_RDC_CHANNEL_CHECK_RATE
 #define NETSTACK_RDC_CHANNEL_CHECK_RATE 128
-
-/* Disabling TCP on CoAP nodes. */
-#undef UIP_CONF_TCP
-#define UIP_CONF_TCP                   0
-
-#undef NETSTACK_CONF_MAC
-//#define NETSTACK_CONF_MAC     nullmac_driver
-#define NETSTACK_CONF_MAC     csma_driver
 
 /* Change this to switch engines. Engine codes in uip-mcast6-engines.h */
 /* When the origin of the multicast is from outside the 6LowPAN use SMRF
@@ -83,6 +77,22 @@
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_NONE
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_SMRF 	// needs on rm090: 1516B RAM &  322B ROM 
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_ROLL_TM 	// needs on rm090: 4176B RAM & 1802B ROM
+
+// don't insert hop-by-hop option
+#define RPL_CONF_INSERT_HBH_OPTION 0
+
+// iMinds wlan prefex: 2001:6a8:1d80:1128
+#define SICSLOWPAN_CONF_ADDR_CONTEXT_1 {addr_contexts[1].prefix[0]=0x20;addr_contexts[1].prefix[1]=0x01;addr_contexts[1].prefix[2]=0x06;addr_contexts[1].prefix[3]=0xa8; \
+                                       addr_contexts[1].prefix[4]=0x1d;addr_contexts[1].prefix[5]=0x80;addr_contexts[1].prefix[6]=0x11;addr_contexts[1].prefix[7]=0x28;}
+
+// Change default UIP route time-out and number of tries before timeout:
+// see http://sourceforge.net/p/contiki/mailman/message/30255859/
+//#define UIP_CONF_ND6_REACHABLE_TIME  300000 //default: 30000 but in rm090 platform default is 600000
+#define UIP_CONF_ND6_MAX_UNICAST_SOLICIT 10 //default: 3
+
+/* Disabling TCP on DTLS nodes. */
+#undef UIP_CONF_TCP
+#define UIP_CONF_TCP                   0
 
 /* Increase rpl-border-router IP-buffer when using more than 64. */
 #undef REST_MAX_CHUNK_SIZE
@@ -112,12 +122,5 @@
 
 /* Enable client-side support for COAP observe */
 //#define COAP_OBSERVE_CLIENT 1
-
-// don't insert hop-by-hop option
-#define RPL_CONF_INSERT_HBH_OPTION 0
-
-// iMinds wlan prefex: 2001:6a8:1d80:1128
-#define SICSLOWPAN_CONF_ADDR_CONTEXT_1 {addr_contexts[1].prefix[0]=0x20;addr_contexts[1].prefix[1]=0x01;addr_contexts[1].prefix[2]=0x06;addr_contexts[1].prefix[3]=0xa8; \
-                                       addr_contexts[1].prefix[4]=0x1d;addr_contexts[1].prefix[5]=0x80;addr_contexts[1].prefix[6]=0x11;addr_contexts[1].prefix[7]=0x28;}
 
 #endif /* __PROJECT_ERBIUM_CONF_H__ */
