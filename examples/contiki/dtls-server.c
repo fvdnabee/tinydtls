@@ -46,9 +46,33 @@
 #define DEBUG_VERBOSE 0
 
 #include "net/ip/uip-debug.h"
+#include "net/ipv6/uip-ds6-route.h"
 
 #include "debug.h"
 #include "dtls.h"
+
+/* for handling serial-line events: */
+#include "dev/serial-line.h"
+unsigned long clock_start; // energest
+unsigned long cpu_start_time; // energest
+unsigned long lpm_start_time; // energest
+unsigned long tx_start_time; // energest
+unsigned long rx_start_time; // energest
+unsigned long irq_start_time; // energest
+uint32_t packet_transmitted_start;
+uint32_t packets_received_start;
+
+/*---------------------------------------------------------------------------*/
+/* Packet sniffer */
+#include "rime.h"
+static uint32_t packets_received = 0;
+static uint32_t packets_transmitted = 0;
+
+void packet_received(void) { packets_received++; }
+void packet_transmitted(int mac_status) { packets_transmitted++; }
+
+RIME_SNIFFER(packet_counter, &packet_received, &packet_transmitted);
+/*---------------------------------------------------------------------------*/
 
 #ifdef TINYDTLS_ERBIUM
 #include "rest-engine.h"
@@ -253,7 +277,8 @@ verify_ecdsa_key(struct dtls_context_t *ctx,
 #endif /* DTLS_ECC */
 
 PROCESS(udp_server_process, "UDP server process");
-AUTOSTART_PROCESSES(&udp_server_process);
+PROCESS(serial_comms, "Energest over serialline");
+AUTOSTART_PROCESSES(&udp_server_process, &serial_comms);
 /*---------------------------------------------------------------------------*/
 static void
 dtls_handle_read(dtls_context_t *ctx) {
@@ -528,6 +553,137 @@ PROCESS_THREAD(udp_server_process, ev, data)
     }
     dtls_handle_message(ctx, &session, uip_appdata, bytes_read);
 #endif
+  }
+
+  PROCESS_END();
+}
+/*---------------------------------------------------------------------------*/
+static char buf[256];
+static int blen;
+#define ADD(...) do {                                                   \
+    blen += snprintf(&buf[blen], sizeof(buf) - blen, __VA_ARGS__);      \
+  } while(0)
+static void
+ipaddr_add(const uip_ipaddr_t *addr)
+{
+  uint16_t a;
+  int i, f;
+  for(i = 0, f = 0; i < sizeof(uip_ipaddr_t); i += 2) {
+    a = (addr->u8[i] << 8) + addr->u8[i + 1];
+    if(a == 0 && f >= 0) {
+      if(f++ == 0) ADD("::");
+    } else {
+      if(f > 0) {
+        f = -1;
+      } else if(i > 0) {
+        ADD(":");
+      }
+      ADD("%x", a);
+    }
+  }
+}
+PROCESS_THREAD(serial_comms, ev, data)
+{
+  static uip_ds6_route_t *r;
+  static uip_ds6_nbr_t *nbr;
+
+  PROCESS_BEGIN();
+
+  /* initialize serial line */
+  serial_line_init();
+#ifdef CONTIKI_TARGET_RM090
+  uart1_set_input(serial_line_input_byte);
+#endif
+
+	/* Rime sniffer */
+  rime_sniffer_add(&packet_counter);
+
+  while(1) {
+    PROCESS_WAIT_EVENT();
+
+     if(ev == serial_line_event_message) {
+      char *line = (char *)data;
+      if (line[0] == '?') {
+        if (line[1] == 'E') { // request to print energest values:
+          printf("%lu %lu %lu %lu %lu %lu %lu %lu\n",
+              clock_time() - clock_start,
+              energest_type_time(ENERGEST_TYPE_CPU) - cpu_start_time,
+              energest_type_time(ENERGEST_TYPE_LPM) - lpm_start_time ,
+              energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start_time,
+              energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start_time,
+              energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time,
+              packets_transmitted - packet_transmitted_start,
+              packets_received - packets_received_start);
+        } else if (line[1] == 'N') { // request to print neighbour table
+          int i = 0;
+          blen = 0;
+          for(nbr = nbr_table_head(ds6_neighbors);
+              nbr != NULL;
+              nbr = nbr_table_next(ds6_neighbors, nbr)) {
+            if (i > 0)
+              ADD(",");
+
+            ipaddr_add(&nbr->ipaddr);
+            i++;
+          }
+
+          if (blen < 256) {
+            buf[blen] = '\0';
+            printf("%s\n", buf);
+          } else {
+            // error ...
+            printf("ERROR buffer too small for blen=%d\n", blen);
+          }
+        } else if (line[1] == 'R') { // request to print routing table
+          int i = 0;
+          blen = 0;
+          // lookup next hop for default route:
+          //uip_ipaddr_t dummy_address;
+          //uip_ip6addr(&dummy_address, 0xfe80, 0, 0, 0, 0, 0, 0, 0); //  hardcoded to aaaa:: for now
+          //uip_ds6_defrt_t * defrt =  uip_ds6_defrt_lookup(&dummy_address); // NOTE: this does not work !
+          uip_ipaddr_t * dftrt_addr = uip_ds6_defrt_choose();
+          // add default route
+          ADD("::,"); // ::/0 is default route
+          ipaddr_add(dftrt_addr);
+          ADD(",0");
+          //ADD("%lu", defrt->lifetime.interval);
+
+          for(r = uip_ds6_route_head(); r != NULL; r = uip_ds6_route_next(r)) {
+            ADD(";");
+            ipaddr_add(&r->ipaddr);
+            ADD(",");
+            ipaddr_add(uip_ds6_route_nexthop(r));
+            ADD(",");
+            ADD("%lu", (unsigned long)r->state.lifetime);
+            i++;
+          }
+
+          if (blen < 256) {
+            buf[blen] = '\0';
+            printf("%s\n", buf);
+          } else {
+            // error ...
+            printf("ERROR buffer too small for blen=%d\n", blen);
+          }
+        }
+      } else if(line[0] == '!') {
+        if (line[1] == 'S') { // start/stop coap transmitting, n/a for coap server however ...
+          // If this is the first time that we will start sending coap requests, then set the energest start and rime sniffer start values
+          if (rx_start_time == 0) {
+            clock_start = clock_time();
+            rx_start_time = energest_type_time(ENERGEST_TYPE_LISTEN);
+            lpm_start_time = energest_type_time(ENERGEST_TYPE_LPM);
+            cpu_start_time = energest_type_time(ENERGEST_TYPE_CPU);
+            tx_start_time = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+            irq_start_time = energest_type_time(ENERGEST_TYPE_IRQ);
+            packet_transmitted_start = packets_transmitted;
+            packets_received_start  = packets_received;
+
+            printf("Energest stats reset.\n");
+          }
+        }
+      }
+    }
   }
 
   PROCESS_END();
