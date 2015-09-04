@@ -614,6 +614,16 @@ PROCESS_THREAD(serial_comms, ev, data)
               energest_type_time(ENERGEST_TYPE_IRQ) - irq_start_time,
               packets_transmitted - packet_transmitted_start,
               packets_received - packets_received_start);
+        } else if (line[1] == 'A') {
+          // get a tentative (is this a problem?)link-local address and return:
+          blen = 0;
+          uip_ds6_addr_t *lladdr;
+          int i;
+          lladdr = uip_ds6_get_link_local(-1);
+          ipaddr_add(&lladdr->ipaddr);
+
+          buf[blen] = '\0';
+          printf("%s\n", buf);
         } else if (line[1] == 'N') { // request to print neighbour table
           int i = 0;
           blen = 0;
