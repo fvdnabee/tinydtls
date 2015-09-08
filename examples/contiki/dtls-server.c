@@ -690,6 +690,8 @@ PROCESS_THREAD(serial_comms, ev, data)
             packets_received_start  = packets_received;
 
             printf("Energest stats reset.\n");
+          } else {
+            printf("Warning: Energest stats have already been reset.\n");
           }
         }
       }
