@@ -31,6 +31,8 @@
 #include "contiki-lib.h"
 #include "contiki-net.h"
 
+#define SERIAL_BUF_LENGTH 2048
+
 #if UIP_CONF_IPV6_RPL
 #include "net/rpl/rpl.h"
 #endif /* UIP_CONF_IPV6_RPL */
@@ -558,7 +560,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-static char buf[256];
+static char buf[SERIAL_BUF_LENGTH];
 static int blen;
 #define ADD(...) do {                                                   \
     blen += snprintf(&buf[blen], sizeof(buf) - blen, __VA_ARGS__);      \
@@ -637,7 +639,7 @@ PROCESS_THREAD(serial_comms, ev, data)
             i++;
           }
 
-          if (blen < 256) {
+          if (blen < SERIAL_BUF_LENGTH) {
             buf[blen] = '\0';
             printf("%s\n", buf);
           } else {
@@ -668,7 +670,7 @@ PROCESS_THREAD(serial_comms, ev, data)
             i++;
           }
 
-          if (blen < 256) {
+          if (blen < SERIAL_BUF_LENGTH) {
             buf[blen] = '\0';
             printf("%s\n", buf);
           } else {
