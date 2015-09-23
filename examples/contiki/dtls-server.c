@@ -383,7 +383,7 @@ init_dtls() {
 #endif /* UIP_CONF_ROUTER */
 
   server_conn = udp_new(NULL, 0, NULL);
-  udp_bind(server_conn, UIP_HTONS(5684));
+  udp_bind(server_conn, UIP_HTONS(61617));
 
   //dtls_set_log_level(DTLS_LOG_DEBUG);
   dtls_set_log_level(DTLS_LOG_CRIT);

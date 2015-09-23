@@ -126,4 +126,7 @@
 /* Enable ENERGEST */
 #define ENERGEST_CONF_ON	1
 
+/* Choose a server port that can be compressed to 4bits by 6LoWPAN NHC */
+#define COAP_SERVER_PORT       61616
+
 #endif /* __PROJECT_ERBIUM_CONF_H__ */
