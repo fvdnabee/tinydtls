@@ -48,7 +48,7 @@
  */
 
 #undef IEEE802154_CONF_PANID
-#define IEEE802154_CONF_PANID          0x2345
+#define IEEE802154_CONF_PANID          0x234A
 
 /* IP buffer size must match all other hops, in particular the border router. */
 
@@ -66,8 +66,8 @@
 #define NETSTACK_CONF_RDC   contikimac_driver
 /* #define NETSTACK_CONF_RDC              nullrdc_driver */
 
-#undef NETSTACK_RDC_CHANNEL_CHECK_RATE
-#define NETSTACK_RDC_CHANNEL_CHECK_RATE 128
+//#undef NETSTACK_RDC_CHANNEL_CHECK_RATE
+//#define NETSTACK_RDC_CHANNEL_CHECK_RATE 128
 
 /* Change this to switch engines. Engine codes in uip-mcast6-engines.h */
 /* When the origin of the multicast is from outside the 6LowPAN use SMRF
@@ -77,9 +77,6 @@
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_NONE
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_SMRF 	// needs on rm090: 1516B RAM &  322B ROM 
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_ROLL_TM 	// needs on rm090: 4176B RAM & 1802B ROM
-
-// don't insert hop-by-hop option
-#define RPL_CONF_INSERT_HBH_OPTION 0
 
 // iMinds wlan prefex: 2001:6a8:1d80:1128
 #define SICSLOWPAN_CONF_ADDR_CONTEXT_1 {addr_contexts[1].prefix[0]=0x20;addr_contexts[1].prefix[1]=0x01;addr_contexts[1].prefix[2]=0x06;addr_contexts[1].prefix[3]=0xa8; \
@@ -110,9 +107,11 @@
 
 /* Must be <= open transactions, default is COAP_MAX_OPEN_TRANSACTIONS-1. */
 /*
+
    #undef COAP_MAX_OBSERVERS
    #define COAP_MAX_OBSERVERS             2
- */
+*/
+
 
 /* Filtering .well-known/core per query can be disabled to save space. */
 #undef COAP_LINK_FORMAT_FILTERING
