@@ -15,7 +15,7 @@
 /* global constants for constrained devices running Contiki */
 #ifndef DTLS_PEER_MAX
 /** The maximum number DTLS peers (i.e. sessions). */
-#  define DTLS_PEER_MAX 1
+#  define DTLS_PEER_MAX 3
 #endif
 
 #ifndef DTLS_HANDSHAKE_MAX
@@ -30,7 +30,8 @@
 
 #ifndef DTLS_HASH_MAX
 /** The maximum number of hash functions that can be used in parallel. */
-#  define DTLS_HASH_MAX (3 * DTLS_PEER_MAX)
+//#  define DTLS_HASH_MAX (3 * DTLS_PEER_MAX)
+#  define DTLS_HASH_MAX (1 * DTLS_PEER_MAX)
 #endif
 
 /************************************************************************/
@@ -56,7 +57,7 @@
 //typedef int ssize_t;
 #undef HAVE_ASSERT_H
 #define assert(x)
-//#define HAVE_VPRINTF
+#define HAVE_VPRINTF
 #endif /* CONTIKI_TARGET_RM090 */
 
 #ifdef CONTIKI_TARGET_SKY

@@ -47,6 +47,12 @@
 
 #define DEBUG_VERBOSE 0
 
+//#define RES_HELLO
+//#define RES_FAST
+#define RES_MEDIUM
+//#define RES_SLOW
+//#define RES_TOGGLE
+
 #include "net/ip/uip-debug.h"
 #include "net/ipv6/uip-ds6-route.h"
 
@@ -291,6 +297,14 @@ dtls_handle_read(dtls_context_t *ctx) {
     session.port = UIP_UDP_BUF->srcport;
     session.size = sizeof(session.addr) + sizeof(session.port);
     
+    if (DEBUG_VERBOSE) {
+      PRINTF("Start printing uip_appdata (uip_datalen() = %d)\n", uip_datalen());
+      size_t i;
+      for (i = 0; i < uip_datalen(); i++)
+        PRINTF("%c", ((uint8_t*)uip_appdata)[i]);
+      PRINTF("\nEnd printing uip_appdata\n");
+    }
+
     dtls_handle_message(ctx, &session, uip_appdata, uip_datalen());
   }
 }
@@ -398,6 +412,7 @@ init_dtls() {
 #include <string.h>
 #include "rest-engine.h"
 
+#ifdef RES_HELLO
 // Hello world resource
 static void res_hello_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
@@ -438,28 +453,29 @@ res_hello_get_handler(void *request, void *response, uint8_t *buffer, uint16_t p
   REST.set_header_etag(response, (uint8_t *)&length, 1);
   REST.set_response_payload(response, buffer, length);
 }
+#endif
 
+#ifdef RES_FAST
+// Observable resource, fast
+static void res_obs1_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+static void res_obs1_periodic_handler(void);
 
-// Observable resource
-static void res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
-static void res_obs_periodic_handler(void);
-
-PERIODIC_RESOURCE(res_obs,
-                  "title=\"Periodic demo\";obs",
-                  res_obs_get_handler,
+PERIODIC_RESOURCE(res_obs1,
+                  "title=\"Periodic demo fast\";obs",
+                  res_obs1_get_handler,
                   NULL,
                   NULL,
                   NULL,
-                  5 * CLOCK_SECOND,
-                  res_obs_periodic_handler);
+                  1 * CLOCK_SECOND,
+                  res_obs1_periodic_handler);
 
 /*
  * Use local resource state that is accessed by res_get_handler() and altered by res_periodic_handler() or PUT or POST.
  */
-static int32_t event_counter = 0;
+static int32_t event_counter_1 = 0;
 
 static void
-res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+res_obs1_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
   /*
    * For minimal complexity, request query and options should be ignored for GET on observable resources.
@@ -467,8 +483,8 @@ res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t pre
    * This would be a TODO in the corresponding files in contiki/apps/erbium/!
    */
   REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
-  REST.set_header_max_age(response, res_obs.periodic->period / CLOCK_SECOND);
-  REST.set_response_payload(response, buffer, snprintf((char *)buffer, preferred_size, "VERY LONG EVENT %lu", event_counter));
+  REST.set_header_max_age(response, res_obs1.periodic->period / CLOCK_SECOND);
+  REST.set_response_payload(response, buffer, snprintf((char *)buffer, preferred_size, "%lu", event_counter_1));
 
   /* The REST.subscription_handler() will be called for observable resources by the REST framework. */
 }
@@ -478,19 +494,126 @@ res_obs_get_handler(void *request, void *response, uint8_t *buffer, uint16_t pre
  */
 
 static void
-res_obs_periodic_handler()
+res_obs1_periodic_handler()
 {
   /* Do a periodic task here, e.g., sampling a sensor. */
-  ++event_counter;
+  ++event_counter_1;
 
   /* Usually a condition is defined under with subscribers are notified, e.g., large enough delta in sensor reading. */
   if(1) {
     /* Notify the registered observers which will trigger the res_get_handler to create the response. */
-    REST.notify_subscribers(&res_obs);
+    REST.notify_subscribers(&res_obs1);
   }
 }
+#endif
+
+#ifdef RES_MEDIUM
+// Observable resource, medium
+static void res_obs2_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+static void res_obs2_periodic_handler(void);
+
+PERIODIC_RESOURCE(res_obs2,
+                  "title=\"Periodic demo medium\";obs",
+                  res_obs2_get_handler,
+                  NULL,
+                  NULL,
+                  NULL,
+                  5 * CLOCK_SECOND,
+                  res_obs2_periodic_handler);
+
+/*
+ * Use local resource state that is accessed by res_get_handler() and altered by res_periodic_handler() or PUT or POST.
+ */
+static int32_t event_counter_2 = 0;
+
+static void
+res_obs2_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  /*
+   * For minimal complexity, request query and options should be ignored for GET on observable resources.
+   * Otherwise the requests must be stored with the observer list and passed by REST.notify_subscribers().
+   * This would be a TODO in the corresponding files in contiki/apps/erbium/!
+   */
+  REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
+  REST.set_header_max_age(response, res_obs2.periodic->period / CLOCK_SECOND);
+  REST.set_response_payload(response, buffer, snprintf((char *)buffer, preferred_size, "%lu", event_counter_2));
+
+  /* The REST.subscription_handler() will be called for observable resources by the REST framework. */
+}
+/*
+ * Additionally, a handler function named [resource name]_handler must be implemented for each PERIODIC_RESOURCE.
+ * It will be called by the REST manager process with the defined period.
+ */
+
+static void
+res_obs2_periodic_handler()
+{
+  /* Do a periodic task here, e.g., sampling a sensor. */
+  ++event_counter_2;
+
+  /* Usually a condition is defined under with subscribers are notified, e.g., large enough delta in sensor reading. */
+  if(1) {
+    /* Notify the registered observers which will trigger the res_get_handler to create the response. */
+    REST.notify_subscribers(&res_obs2);
+  }
+}
+#endif
+
+#ifdef RES_SLOW
+// Observable resource, slow
+static void res_obs3_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+static void res_obs3_periodic_handler(void);
+
+PERIODIC_RESOURCE(res_obs3,
+                  "title=\"Periodic demo slow\";obs",
+                  res_obs3_get_handler,
+                  NULL,
+                  NULL,
+                  NULL,
+                  50 * CLOCK_SECOND,
+                  res_obs3_periodic_handler);
+
+/*
+ * Use local resource state that is accessed by res_get_handler() and altered by res_periodic_handler() or PUT or POST.
+ */
+static int32_t event_counter_3 = 0;
+
+static void
+res_obs3_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  /*
+   * For minimal complexity, request query and options should be ignored for GET on observable resources.
+   * Otherwise the requests must be stored with the observer list and passed by REST.notify_subscribers().
+   * This would be a TODO in the corresponding files in contiki/apps/erbium/!
+   */
+  REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
+  REST.set_header_max_age(response, res_obs3.periodic->period / CLOCK_SECOND);
+  REST.set_response_payload(response, buffer, snprintf((char *)buffer, preferred_size, "%lu", event_counter_3));
+
+  /* The REST.subscription_handler() will be called for observable resources by the REST framework. */
+}
+/*
+ * Additionally, a handler function named [resource name]_handler must be implemented for each PERIODIC_RESOURCE.
+ * It will be called by the REST manager process with the defined period.
+ */
+
+static void
+res_obs3_periodic_handler()
+{
+  /* Do a periodic task here, e.g., sampling a sensor. */
+  ++event_counter_3;
+
+  /* Usually a condition is defined under with subscribers are notified, e.g., large enough delta in sensor reading. */
+  if(1) {
+    /* Notify the registered observers which will trigger the res_get_handler to create the response. */
+    REST.notify_subscribers(&res_obs3);
+  }
+}
+#endif
 
 
+
+#ifdef RES_TOGGLE
 // Toggle resource
 #include "dev/leds.h"
 
@@ -510,6 +633,7 @@ res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t prefer
   leds_toggle(LEDS_RED);
 }
 #endif
+#endif /* TINYDTLS_ERBIUM */
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
@@ -531,11 +655,23 @@ PROCESS_THREAD(udp_server_process, ev, data)
   rest_init_engine();
 
   /* Activate the application-specific resources. */
+#ifdef RES_HELLO
   rest_activate_resource(&res_hello, "hello");
-  rest_activate_resource(&res_obs, "obs");
+#endif
+#ifdef RES_FAST
+  rest_activate_resource(&res_obs1, "fast");
+#endif
+#ifdef RES_MEDIUM
+  rest_activate_resource(&res_obs2, "medium");
+#endif
+#ifdef RES_SLOW
+  rest_activate_resource(&res_obs3, "slow");
+#endif
+#ifdef RES_TOGGLE
 #if PLATFORM_HAS_LEDS
 /*  rest_activate_resource(&res_leds, "actuators/leds"); */
   rest_activate_resource(&res_toggle, "actuators/toggle");
+#endif
 #endif
 #endif
 
