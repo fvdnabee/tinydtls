@@ -78,9 +78,13 @@
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_SMRF 	// needs on rm090: 1516B RAM &  322B ROM 
 //#define UIP_MCAST6_CONF_ENGINE UIP_MCAST6_ENGINE_ROLL_TM 	// needs on rm090: 4176B RAM & 1802B ROM
 
-// iMinds wlan prefex: 2001:6a8:1d80:1128
+// iMinds wlan prefix: 2001:6a8:1d80:1128
+// #define SICSLOWPAN_CONF_ADDR_CONTEXT_1 {addr_contexts[1].prefix[0]=0x20;addr_contexts[1].prefix[1]=0x01;addr_contexts[1].prefix[2]=0x06;addr_contexts[1].prefix[3]=0xa8; \
+//                                         addr_contexts[1].prefix[4]=0x1d;addr_contexts[1].prefix[5]=0x80;addr_contexts[1].prefix[6]=0x11;addr_contexts[1].prefix[7]=0x28;}
+
+// Wilab2 Raspberry Pi prefix: 2001:6a8:1d80:562
 #define SICSLOWPAN_CONF_ADDR_CONTEXT_1 {addr_contexts[1].prefix[0]=0x20;addr_contexts[1].prefix[1]=0x01;addr_contexts[1].prefix[2]=0x06;addr_contexts[1].prefix[3]=0xa8; \
-                                       addr_contexts[1].prefix[4]=0x1d;addr_contexts[1].prefix[5]=0x80;addr_contexts[1].prefix[6]=0x11;addr_contexts[1].prefix[7]=0x28;}
+                                        addr_contexts[1].prefix[4]=0x1d;addr_contexts[1].prefix[5]=0x80;addr_contexts[1].prefix[6]=0x05;addr_contexts[1].prefix[7]=0x62;}
 
 // Change default UIP route time-out and number of tries before timeout:
 // see http://sourceforge.net/p/contiki/mailman/message/30255859/
